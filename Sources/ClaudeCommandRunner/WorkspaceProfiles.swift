@@ -144,14 +144,37 @@ func handleSaveWorkspaceProfile(params: CallTool.Parameters, logger: Logger) asy
 
     logger.info("Workspace profile saved: \(name)")
 
+    // v6.0 Tier C: optionally also write a Warp-native launch config so it
+    // appears in Warp's launch UI. Off by default; opt in per call.
+    var includeWarpConfig = false
+    if let flag = arguments["include_warp_launch_config"] {
+        if case .bool(let b) = flag { includeWarpConfig = b }
+        else if case .string(let s) = flag { includeWarpConfig = (s == "true" || s == "1") }
+    }
+
+    var warpConfigLine: String? = nil
+    if includeWarpConfig {
+        do {
+            let url = try WarpLaunchConfig.write(profile: profile, logger: logger)
+            warpConfigLine = "• Warp launch config: \(url.path)"
+        } catch {
+            warpConfigLine = "• Warp launch config: ⚠️ failed to write — \(error.localizedDescription)"
+        }
+    }
+
+    var output = """
+    ✅ Workspace profile saved: "\(name)"
+    • Directory: \(directory)
+    • Commands: \(defaultCommands.isEmpty ? "none" : defaultCommands.joined(separator: ", "))
+    • Env vars: \(environmentVars.isEmpty ? "none" : "\(environmentVars.count) variable(s)")
+    • Terminal: \(terminalPreference)
+    """
+    if let line = warpConfigLine {
+        output += "\n\(line)"
+    }
+
     return CallTool.Result(
-        content: [.text("""
-        ✅ Workspace profile saved: "\(name)"
-        • Directory: \(directory)
-        • Commands: \(defaultCommands.isEmpty ? "none" : defaultCommands.joined(separator: ", "))
-        • Env vars: \(environmentVars.isEmpty ? "none" : "\(environmentVars.count) variable(s)")
-        • Terminal: \(terminalPreference)
-        """)],
+        content: [.text(output)],
         isError: false
     )
 }
@@ -249,8 +272,14 @@ func handleDeleteWorkspaceProfile(params: CallTool.Parameters, logger: Logger) a
 
     if removed {
         logger.info("Workspace profile deleted: \(name)")
+        // Tier C: best-effort cleanup of any companion Warp launch config.
+        // Silent if absent. Reported in the response for transparency.
+        let warpRemoved = WarpLaunchConfig.remove(profileName: name, logger: logger)
+        let warpLine = warpRemoved
+            ? "\n• Removed Warp launch config: \(WarpLaunchConfig.fileURL(forProfile: name).path)"
+            : ""
         return CallTool.Result(
-            content: [.text("✅ Workspace profile '\(name)' deleted.")],
+            content: [.text("✅ Workspace profile '\(name)' deleted.\(warpLine)")],
             isError: false
         )
     } else {

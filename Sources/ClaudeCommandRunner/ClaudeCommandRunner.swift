@@ -465,7 +465,7 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
                 // Workspace Profiles
                 Tool(
                     name: "save_workspace_profile",
-                    description: "Save current project context as a named workspace profile (directory, commands, env vars, terminal preference)",
+                    description: "Save current project context as a named workspace profile (directory, commands, env vars, terminal preference). Optionally also writes a Warp-native launch config to ~/.warp/launch_configurations/ so the profile appears in Warp's launch UI.",
                     inputSchema: .object([
                         "type": .string("object"),
                         "properties": .object([
@@ -488,6 +488,10 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
                             "terminal_preference": .object([
                                 "type": .string("string"),
                                 "description": .string("Preferred terminal for this project (Warp, iTerm, Terminal)")
+                            ]),
+                            "include_warp_launch_config": .object([
+                                "type": .string("boolean"),
+                                "description": .string("When true, also write the profile as a Warp launch config under ~/.warp/launch_configurations/<name>.yaml. Default: false. Env vars are not emitted into the launch config (Warp schema does not support them at top level).")
                             ])
                         ]),
                         "required": .array([.string("name"), .string("directory")])
