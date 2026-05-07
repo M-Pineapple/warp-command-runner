@@ -468,36 +468,54 @@ For longer commands, use `execute_with_streaming` instead.
 
 ### macOS Permission Error: "osascript is not allowed to send keystrokes" (Error 1002)
 
-This error occurs when macOS blocks AppleScript automation. It's common after fresh macOS installs, major updates (like Sequoia), or when the Automation permissions cache becomes corrupted.
+This error occurs when macOS blocks AppleScript automation. It's common after fresh macOS installs, major updates (like Sequoia/Tahoe), or when the Automation permissions cache becomes corrupted. **Five out of 39 tools depend on this path** (`execute_command`, `execute_with_auto_retrieve`, `execute_with_streaming`, `run_template`, `send_to_session`); the other 34 are unaffected and continue to work even while this is broken.
 
 **Symptoms:**
 - Error message: `System Events got an error: osascript is not allowed to send keystrokes. (1002)`
 - Toggling permissions off/on in System Settings doesn't help
 - No permission prompt appears when the MCP tries to run
 
-**Solution:**
+**Why this is so painful** (lesson from a real v6.0 install):
+
+The MCP server runs as a **child process of Claude Desktop**. When it spawns `osascript`, modern macOS attributes the AppleEvent action to the **responsible top-level process** — Claude Desktop — not to the transient child binary. This means:
+
+- ✅ Adding `claude-command-runner` to Accessibility — needed but **not sufficient**
+- ✅ Adding `Claude` (Claude Desktop) to Accessibility — needed
+- ✅ Granting Warp Full Disk Access — **irrelevant** (wrong process attribution; wrong category)
+- ✅ Restarting Claude Desktop / Warp — clears in-process cache only, not the system-level TCC denial
+- ❌ **Step 5 below (manual osascript trigger from a real shell) is mandatory** — it's the only thing that causes macOS to re-evaluate the chain and re-prompt
+
+**Solution (do all steps in order — do not skip 5):**
 
 1. **Reset Automation permissions** (this resets ALL Automation permissions, not just for this app):
    ```bash
    tccutil reset AppleEvents
    ```
 
-2. **Full Mac restart** (not just logout – a complete restart is required)
+2. **Full Mac restart** (not just logout — a complete shutdown is required)
 
 3. **Open your terminal app first** (Warp, WarpPreview, or whichever you use)
 
 4. **Open Claude Desktop**
 
-5. **Trigger the permission prompt manually** by running this in Terminal:
+5. **🚨 Critical — trigger a fresh permission prompt manually** by running this in your terminal (not from Claude — from a shell *you* opened):
    ```bash
    osascript -e 'tell application "System Events" to keystroke "x"'
    ```
+   The letter `x` will be typed wherever your cursor is — that's expected and harmless. The point is to make macOS evaluate the AppleEvents request from a fresh source so it prompts you. Skipping this step is why most "I did everything but it still says 1002" issues happen.
 
 6. **Grant permission** when macOS prompts you
 
-7. **Try the MCP command again** – it should now work and Claude.app will appear in the Automation list
+7. **Try the MCP command again** — it should now work and Claude.app will appear in the **System Settings → Privacy & Security → Automation** list
 
-**Note:** A simple toggle reset or targeted `tccutil` command often doesn't work – the full AppleEvents reset plus restart is usually required.
+**Workaround until you have time to do all this:** `execute_pipeline` is a fully-functional substitute for `execute_command`. It uses pure subprocess (`/bin/bash -c`), needs zero macOS permissions, captures output cleanly, and supports the same use cases. Wrap a single command as a 1-step pipeline:
+```json
+{"steps": [{"command": "git status"}]}
+```
+
+**Notes:**
+- A simple toggle reset or targeted `tccutil` command often doesn't work — the full AppleEvents reset plus restart is usually required.
+- After every `swift build`, the binary's identity (cdhash) changes because we're ad-hoc signed. The Accessibility entry for `claude-command-runner` may go stale. Remove and re-add the entry, OR rely on the Claude Desktop entry (which is what actually matters for the responsibility chain).
 
 **Bundle ID Reference:** Claude Desktop uses `com.anthropic.claudefordesktop`
 

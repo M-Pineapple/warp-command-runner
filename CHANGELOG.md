@@ -5,6 +5,26 @@ All notable changes to Claude Command Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.1] - 2026-05-07 — patch follow-up to v6.0.0
+
+Three real findings surfaced from the v6.0.0 live verification, plus one already-staged fix that was waiting for a tag.
+
+### Fixed
+
+- **`execute_and_parse` git_status parser** garbled output for human-readable input. The parser was hardcoded for `git status --porcelain` (2-char status code at line start) and would treat the first character of every prose line as a status code — producing nonsense like `Staged: 3 file(s) • O branch main` for actual `git status` output. v6.0.1 now detects format (presence of "On branch", "HEAD detached", "Changes to be committed", etc.) and dispatches to a human-format parser or the existing porcelain parser. Output for both formats is now correct.
+- **`Configuration` decoder** failed loudly with `keyNotFound` errors when an existing on-disk `~/.claude-command-runner/config.json` predated one or more top-level schema fields (e.g. `security`). Swift's auto-synthesized `Codable` init uses `decode` (not `decodeIfPresent`) and ignores property defaults. v6.0.1 adds a custom `init(from:)` to `Configuration` that uses `decodeIfPresent ?? <default>` for every top-level field. Old configs continue to load without error logs; new fields silently fall back to defaults.
+- **MCP `serverInfo.version`** was hardcoded to `"5.0.0"`. v6.0.1 reports `"6.0.1"`. (Already fixed on `main` between v6.0.0 and v6.0.1; rolled into this tag.)
+
+### Documentation
+
+- **README troubleshooting** for "Error 1002 / osascript not allowed to send keystrokes" rewritten with a "Why this is so painful" section explaining macOS responsible-process attribution. Step 5 (manual `osascript -e 'tell application "System Events" to keystroke "x"'` from a real shell) is now flagged as **mandatory, not optional** — that's the step that actually causes macOS to re-prompt and unstick the chain. Empirically validated during v6.0.0 install: every System Settings toggle was correct, full Mac restart performed, but the chain only unstuck after step 5. Also adds a workaround note: `execute_pipeline` is a fully-functional substitute for `execute_command` while TCC is being figured out — no Apple Events involved.
+
+### Notes
+
+- Tool count unchanged: still 39.
+- No API breaking changes.
+- AGPL hygiene unchanged (no new vendoring).
+
 ## [6.0.0] - 2026-05-07 — Warp re-pivot
 
 This release is a **re-pivot back to Warp Terminal**, triggered by Warp going open source under AGPL-3.0 ([github.com/warpdotdev/warp](https://github.com/warpdotdev/warp)) in early May 2026. It re-establishes Warp as the primary integration target, replaces fragile AppleScript paths with documented surfaces, and adds a new install path: **Warp's native agent panel** as a first-class consumer alongside Claude Desktop.

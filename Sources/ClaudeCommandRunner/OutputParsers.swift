@@ -132,52 +132,154 @@ private func applyParser(command: String, stdout: String, stderr: String, exitCo
 // MARK: - Individual Parsers
 
 private func parseGitStatus(stdout: String, exitCode: Int32) -> String {
+    // Detect the input format. `git status` (human) starts with "On branch X"
+    // or "HEAD detached" or "Not a git repository". `git status --porcelain`
+    // produces 2-char status codes per line (or "## branch" with --branch).
+    // Earlier versions of this parser assumed porcelain unconditionally and
+    // mis-parsed human output (treating "On branch main" as status code "On"
+    // for file " branch main"). Fixed in v6.0.1 to dispatch by format.
+    let lines = stdout.components(separatedBy: "\n")
+    let isHuman = lines.contains { line in
+        let t = line.trimmingCharacters(in: .whitespaces)
+        return t.hasPrefix("On branch ")
+            || t.hasPrefix("HEAD detached")
+            || t.hasPrefix("Not a git repository")
+            || t == "nothing to commit, working tree clean"
+            || t.hasPrefix("Changes to be committed")
+            || t.hasPrefix("Changes not staged for commit")
+            || t.hasPrefix("Untracked files")
+    }
+
+    return isHuman
+        ? parseGitStatusHuman(lines: lines)
+        : parseGitStatusPorcelain(lines: lines)
+}
+
+/// Parse human-readable `git status` output. Tracks the current section
+/// ("Changes to be committed", "Changes not staged", "Untracked files")
+/// and assigns indented file lines accordingly.
+private func parseGitStatusHuman(lines: [String]) -> String {
     var staged: [String] = []
     var unstaged: [String] = []
     var untracked: [String] = []
     var branch = "unknown"
 
-    for line in stdout.components(separatedBy: "\n") {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
+    enum Section { case none, staged, unstaged, untracked }
+    var section: Section = .none
+
+    for raw in lines {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
 
         if trimmed.hasPrefix("On branch ") {
             branch = String(trimmed.dropFirst("On branch ".count))
-        } else if trimmed.hasPrefix("##") {
-            // Short format branch line
-            let parts = trimmed.dropFirst(3).split(separator: ".")
-            if let first = parts.first {
-                branch = String(first)
-            }
+            section = .none
+            continue
+        }
+        if trimmed.hasPrefix("HEAD detached") {
+            branch = "(detached HEAD)"
+            section = .none
+            continue
         }
 
-        // Porcelain format parsing
-        if line.count >= 3 {
-            let index = line.index(line.startIndex, offsetBy: 0)
-            let worktree = line.index(line.startIndex, offsetBy: 1)
-            let file = String(line.dropFirst(3))
+        if trimmed.hasPrefix("Changes to be committed") {
+            section = .staged; continue
+        }
+        if trimmed.hasPrefix("Changes not staged for commit") {
+            section = .unstaged; continue
+        }
+        if trimmed.hasPrefix("Untracked files") {
+            section = .untracked; continue
+        }
 
-            if line[index] != " " && line[index] != "?" {
-                staged.append("\(line[index]) \(file)")
-            }
-            if line[worktree] != " " && line[worktree] != "?" {
-                unstaged.append("\(line[worktree]) \(file)")
-            }
-            if line[index] == "?" {
-                untracked.append(file)
-            }
+        // Section terminators / informational lines we explicitly skip.
+        if trimmed.isEmpty
+            || trimmed.hasPrefix("(use ")
+            || trimmed.hasPrefix("Your branch")
+            || trimmed == "nothing to commit, working tree clean"
+            || trimmed == "no changes added to commit (use \"git add\" and/or \"git commit -a\")" {
+            continue
+        }
+
+        // File entries are indented with at least one tab/space.
+        guard raw.first == " " || raw.first == "\t" else { continue }
+
+        switch section {
+        case .staged:
+            // Format: "modified:   path", "new file:   path", "deleted:    path", "renamed:    old -> new"
+            staged.append(trimmed)
+        case .unstaged:
+            unstaged.append(trimmed)
+        case .untracked:
+            untracked.append(trimmed)
+        case .none:
+            break
         }
     }
 
-    return """
-    🔀 Git Status (parsed):
-    Branch: \(branch)
-    Staged: \(staged.isEmpty ? "none" : "\(staged.count) file(s)")
-    \(staged.map { "  • \($0)" }.joined(separator: "\n"))
-    Unstaged: \(unstaged.isEmpty ? "none" : "\(unstaged.count) file(s)")
-    \(unstaged.map { "  • \($0)" }.joined(separator: "\n"))
-    Untracked: \(untracked.isEmpty ? "none" : "\(untracked.count) file(s)")
-    \(untracked.map { "  • \($0)" }.joined(separator: "\n"))
-    """
+    return formatGitStatus(branch: branch, staged: staged, unstaged: unstaged, untracked: untracked)
+}
+
+/// Parse porcelain v1 `git status --porcelain` output. Each line is
+/// "XY <path>" where X is the staged status, Y the worktree status,
+/// and "??" indicates untracked.
+private func parseGitStatusPorcelain(lines: [String]) -> String {
+    var staged: [String] = []
+    var unstaged: [String] = []
+    var untracked: [String] = []
+    var branch = "unknown"
+
+    for line in lines {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+        // --branch header line, e.g. "## main...origin/main"
+        if trimmed.hasPrefix("##") {
+            let body = trimmed.dropFirst(2).trimmingCharacters(in: .whitespaces)
+            if let first = body.split(separator: ".").first {
+                branch = String(first).trimmingCharacters(in: .whitespaces)
+            }
+            continue
+        }
+
+        // Need at least "XY " + a filename.
+        guard line.count >= 4 else { continue }
+
+        let chars = Array(line)
+        let staged_ch = chars[0]
+        let work_ch = chars[1]
+        // Path begins after the 2-char code and a separator space.
+        let file = String(line.dropFirst(3))
+
+        if staged_ch == "?" && work_ch == "?" {
+            untracked.append(file)
+            continue
+        }
+        if staged_ch != " " {
+            staged.append("\(staged_ch) \(file)")
+        }
+        if work_ch != " " {
+            unstaged.append("\(work_ch) \(file)")
+        }
+    }
+
+    return formatGitStatus(branch: branch, staged: staged, unstaged: unstaged, untracked: untracked)
+}
+
+private func formatGitStatus(branch: String, staged: [String], unstaged: [String], untracked: [String]) -> String {
+    var out = "🔀 Git Status (parsed):\n"
+    out += "Branch: \(branch)\n"
+    out += "Staged: \(staged.isEmpty ? "none" : "\(staged.count) file(s)")"
+    if !staged.isEmpty {
+        out += "\n" + staged.map { "  • \($0)" }.joined(separator: "\n")
+    }
+    out += "\nUnstaged: \(unstaged.isEmpty ? "none" : "\(unstaged.count) file(s)")"
+    if !unstaged.isEmpty {
+        out += "\n" + unstaged.map { "  • \($0)" }.joined(separator: "\n")
+    }
+    out += "\nUntracked: \(untracked.isEmpty ? "none" : "\(untracked.count) file(s)")"
+    if !untracked.isEmpty {
+        out += "\n" + untracked.map { "  • \($0)" }.joined(separator: "\n")
+    }
+    return out
 }
 
 private func parseGitLog(stdout: String, exitCode: Int32) -> String {

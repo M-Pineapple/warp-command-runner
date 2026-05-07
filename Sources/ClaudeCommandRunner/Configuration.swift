@@ -97,10 +97,41 @@ public struct Configuration: Codable {
     public var interactiveDetection: InteractiveDetection = InteractiveDetection()
     public var port: Int = 9876
     public var autoUpdate: Bool = true
-    
+
     /// Default configuration
     public static var `default`: Configuration {
         return Configuration()
+    }
+
+    public init() {}
+
+    /// Custom decoder added in v6.0.1 to tolerate older on-disk config.json
+    /// files that predate one or more top-level schema fields. The
+    /// auto-synthesized Codable init uses `decode` (not `decodeIfPresent`)
+    /// for every property and fails hard on the first missing key — even
+    /// when the property has a Swift-level default value. This decoder
+    /// uses `decodeIfPresent ?? <default>` for each top-level field, so
+    /// missing keys silently fall back to the in-code defaults.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.terminal = try c.decodeIfPresent(Terminal.self, forKey: .terminal) ?? Terminal()
+        self.security = try c.decodeIfPresent(Security.self, forKey: .security) ?? Security()
+        self.output = try c.decodeIfPresent(Output.self, forKey: .output) ?? Output()
+        self.history = try c.decodeIfPresent(History.self, forKey: .history) ?? History()
+        self.logging = try c.decodeIfPresent(Logging.self, forKey: .logging) ?? Logging()
+        self.notifications = try c.decodeIfPresent(Notifications.self, forKey: .notifications) ?? Notifications()
+        self.workspace = try c.decodeIfPresent(Workspace.self, forKey: .workspace) ?? Workspace()
+        self.fileWatching = try c.decodeIfPresent(FileWatching.self, forKey: .fileWatching) ?? FileWatching()
+        self.ssh = try c.decodeIfPresent(SSHConfig.self, forKey: .ssh) ?? SSHConfig()
+        self.interactiveDetection = try c.decodeIfPresent(InteractiveDetection.self, forKey: .interactiveDetection) ?? InteractiveDetection()
+        self.port = try c.decodeIfPresent(Int.self, forKey: .port) ?? 9876
+        self.autoUpdate = try c.decodeIfPresent(Bool.self, forKey: .autoUpdate) ?? true
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case terminal, security, output, history, logging
+        case notifications, workspace, fileWatching, ssh
+        case interactiveDetection, port, autoUpdate
     }
 }
 
