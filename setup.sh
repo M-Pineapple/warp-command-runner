@@ -2,6 +2,7 @@
 
 # Make scripts executable
 chmod +x build.sh
+chmod +x scripts/patch-swift-sdk.sh
 chmod +x examples/run_test.sh
 chmod +x examples/test_client.py
 
