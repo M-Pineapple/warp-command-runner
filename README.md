@@ -42,7 +42,8 @@ A powerful Model Context Protocol (MCP) server that bridges Claude Desktop **and
 
 ## Overview
 
-Claude Command Runner revolutionises the development workflow by allowing Claude to:
+Claude Command Runner is a **dual-consumer MCP server** — the same binary serves Claude Desktop **and** Warp's native agent panel. It enables an LLM (whichever you've configured in either client) to:
+
 - Execute terminal commands directly from conversations
 - Chain commands with conditional logic using pipelines
 - Stream output in real-time for long builds
@@ -52,10 +53,12 @@ Claude Command Runner revolutionises the development workflow by allowing Claude
 - Read/write the macOS clipboard
 - Probe environment context (git, venv, Docker, Node)
 - Parse command output into structured JSON
-- Manage workspace profiles per project
-- Orchestrate multiple terminal tabs
+- Manage workspace profiles per project (with optional emission as Warp launch configs)
+- Orchestrate multiple terminal tabs (open via `warp://` deeplinks; AppleScript fallback for non-Warp terminals)
 - Watch files and trigger commands on changes
 - Execute commands on remote hosts via SSH
+- **(v6.0)** Surface tool-execution status to Warp's UI as OSC 777 `warp://cli-agent` events
+- **(v6.0, opt-in)** Stream clean preexec / command-finished events from your shell to the MCP via a per-uid Unix domain socket
 
 ## 🎯 Key Features
 
@@ -123,16 +126,20 @@ The `execute_with_auto_retrieve` command intelligently detects command types and
 
 ## 📊 Why Warp Terminal?
 
-For the best experience, we recommend [Warp Terminal](https://app.warp.dev/referral/G9W3EY):
+[Warp Terminal](https://app.warp.dev/referral/G9W3EY) is the primary integration target. The other terminals work for the basics — what Warp uniquely unlocks in v6.0 is documented integration surfaces:
 
 | Feature | Warp | Terminal.app | iTerm2 |
 |---------|------|--------------|---------|
-| Auto Output Capture | ✅ | ❌ | ❌ |
-| Command History Integration | ✅ | ❌ | ❌ |
-| AI-Powered Features | ✅ | ❌ | ❌ |
+| `warp://` deeplinks for tab/window | ✅ (v6.0 uses these) | ❌ | ❌ |
+| Native MCP agent panel — chat with Claude *in* the terminal | ✅ (`~/.warp/.mcp.json`) | ❌ | ❌ |
+| OSC 777 cli-agent event channel for status surfacing | ✅ | ❌ | ❌ |
+| Workspace profile → recognized launch config | ✅ (`~/.warp/launch_configurations/`) | ❌ | ❌ |
+| AppleScript-driven new tab + keystroke send | ✅ | ✅ | ✅ |
 | Modern UI/UX | ✅ | ⚠️ | ⚠️ |
 
-> 💡 **Get Warp Free**: [Download Warp Terminal](https://app.warp.dev/referral/G9W3EY) – It's free and makes Claude Command Runner significantly more powerful!
+Output capture (`/tmp/<id>.json` polling) and the 24 tools that don't touch the terminal at all (clipboard, SSH, file watch, env snapshots, etc.) work identically across all terminals.
+
+> 💡 **Get Warp**: [Download Warp Terminal](https://app.warp.dev/referral/G9W3EY) – it's free, open source (AGPL-3.0), and makes the v6.0-specific surfaces above available to you.
 
 ## Installation
 
@@ -250,10 +257,17 @@ cd claude-command-runner
 
 | Tool | Description | Use Case |
 |------|-------------|----------|
-| `open_terminal_tab` | Open a new named terminal tab | Parallel workflows |
-| `send_to_session` | Send command to a specific tab | Targeted execution |
+| `open_terminal_tab` | Open a new named terminal tab (Warp: via `warp://action/new_tab` deeplink in v6.0) | Parallel workflows |
+| `send_to_session` | Send command to a specific tab (AppleScript keystroke; tab-targeting limited on Warp) | Targeted execution |
 | `list_sessions` | View active terminal sessions | Session overview |
 | `close_session` | Close a named session | Cleanup |
+| `cleanup_sessions` | Bulk-remove stale sessions; optionally close their tabs | Hygiene |
+
+#### Interactive Command Detection (v5.0)
+
+| Tool | Description | Use Case |
+|------|-------------|----------|
+| `check_interactive` | Classify a command for TTY/stdin requirements before running it | Avoid hangs from `vim`, `ssh`, `psql`, REPLs |
 
 #### File Watching (v5.0)
 
@@ -271,6 +285,14 @@ cd claude-command-runner
 | `save_ssh_profile` | Save SSH connection profile | Quick connect |
 | `list_ssh_profiles` | View saved SSH profiles | Overview |
 | `delete_ssh_profile` | Remove an SSH profile | Cleanup |
+
+#### Warp v6.0 — deeplinks, OSC 777, shell shim
+
+| Tool | Description | Use Case |
+|------|-------------|----------|
+| `focus_warp_session` | Dispatch `warp://session/<uuid>` to focus a Warp pane (UUID must be one Warp recognises — typically from the optional shell shim's events) | Resume work in a specific pane |
+| `emit_warp_event` | Build a `printf` invocation that emits an OSC 777 `warp://cli-agent` JSON event into Warp's UI. Schema: `session_start` / `prompt_submit` / `tool_complete` / `stop` / `permission_request` / `idle_prompt`. The returned `printf` must be run inside a Warp pane (e.g. via `execute_command`) to take effect | Status notifications |
+| `shell_shim_status` | Report optional shell-shim socket state and recent events | Verify shim is wired up |
 
 ### Example Workflows
 
@@ -382,8 +404,11 @@ SSH profiles are stored at `~/.claude-command-runner/ssh_profiles.json`.
 
 ## 🤔 Frequently Asked Questions
 
-### Q: What's new in v5.0.0?
-**A:** Ten new feature categories bringing the tool count from 12 to 30. Highlights include clipboard integration, macOS notifications, environment intelligence, structured output parsing, workspace profiles, multi-terminal sessions, file watchers, and SSH remote execution. See the full changelog for details.
+### Q: What's new in v6.0.0?
+**A:** Re-pivot to Warp after Warp went open source. Dual-consumer architecture (register the same binary in `~/.warp/.mcp.json` to use it from Warp's native agent panel, in addition to Claude Desktop). `warp://` deeplinks replace AppleScript menu-clicking for tab/window operations. New OSC 777 emitter (`emit_warp_event`) surfaces structured events into Warp's UI. New optional shell shim emits clean preexec/command-finished events to the MCP. Workspace profiles can now also emit Warp-native launch configs. ~460 LOC of dead code removed. Tool count goes from a previously-undercounted 36 (the v5 README claimed 30) up to **39**. See [CHANGELOG.md](CHANGELOG.md) and [docs/WARP_AGENT.md](docs/WARP_AGENT.md) for the full story.
+
+### Q: What was new in v5.0.0?
+**A:** Ten new feature categories bringing the tool count from 12 to 36 (the v5 README under-counted as 30; the dispatch table actually registered 36). Highlights: clipboard integration, macOS notifications, environment intelligence, structured output parsing, workspace profiles, multi-terminal sessions, file watchers, SSH remote execution.
 
 ### Q: When should I use pipelines vs regular commands?
 **A:** Use pipelines when you need:
@@ -434,7 +459,7 @@ For longer commands, use `execute_with_streaming` instead.
 - `warn` – Warning is shown, pipeline continues
 
 ### Q: Can I nest pipelines or run templates inside pipelines?
-**A:** Not directly in v4.0, but you can create templates that contain multiple commands separated by `&&` or `;`.
+**A:** Not directly. You can create templates that contain multiple commands separated by `&&` or `;`, or compose by calling `run_template` and `execute_pipeline` from the same conversation.
 
 ### Q: Where is my command history stored?
 **A:** In an SQLite database at `~/.claude-command-runner/claude_commands.db`. It tracks all commands, outputs, exit codes, and execution times.
@@ -480,23 +505,23 @@ This error occurs when macOS blocks AppleScript automation. It's common after fr
 
 ### macOS Accessibility Permission Issues
 
-The MCP binary requires **Accessibility** permission to send commands to your terminal. Without it, all command execution will fail. If you skipped step 3 during installation, do it now.
+The MCP binary requires **Accessibility** permission only for the AppleScript keystroke path used by `send_to_session` (typing into a specific Warp tab) and the legacy non-Warp paths in `execute_command` for iTerm/Terminal/Alacritty. **Most v6.0 tools work without Accessibility:** subprocess-based execution, `warp://` deeplinks for tab opening, clipboard, SSH, env snapshots, file watch, profiles, and all 24 server-side tools.
 
-**Symptoms:**
+**Symptoms (when it does matter):**
 - Error message: `osascript is not allowed assistive access. (-1719)`
-- Multi-terminal tools fail while other tools (clipboard, SSH, environment context) work fine
+- `send_to_session` fails; clipboard, SSH, env-context, deeplink-based `open_terminal_tab` all work fine
 
 **Solution:**
 
 1. Open **System Settings → Privacy & Security → Accessibility**
 2. Click the **+** button and navigate to your `claude-command-runner` binary:
    ```
-   /path/to/claude-command-runner/.build/arm64-apple-macosx/release/claude-command-runner
+   /path/to/claude-command-runner/.build/release/claude-command-runner
    ```
 3. The `.build` folder is hidden by default — press **Cmd+Shift+.** in Finder to reveal it
 4. Toggle the permission **on** for the binary
 
-**Important:** macOS tracks Accessibility permissions by binary identity. After every `swift build`, the binary changes and you must **re-add it** to the Accessibility list. This only affects the multi-terminal session tools — all other tools work without Accessibility permission.
+**Important:** macOS tracks Accessibility permissions by binary identity. After every `swift build`, the binary changes and you must **re-add it** to the Accessibility list. This only affects keystroke-injection paths — most tools are unaffected.
 
 ---
 
