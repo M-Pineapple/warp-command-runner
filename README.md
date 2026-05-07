@@ -60,6 +60,28 @@ Claude Command Runner is a **dual-consumer MCP server** — the same binary serv
 - **(v6.0)** Surface tool-execution status to Warp's UI as OSC 777 `warp://cli-agent` events
 - **(v6.0, opt-in)** Stream clean preexec / command-finished events from your shell to the MCP via a per-uid Unix domain socket
 
+## 🧭 Which Claude product does this work with?
+
+`claude-command-runner` is an MCP server, so any Anthropic surface that consumes MCP servers can call its 39 tools — but the **value-add varies sharply by consumer**, and you should pick deliberately.
+
+| Consumer | Where to register | Value-add | Recommended? |
+|---|---|---|---|
+| **Claude Desktop** | `~/Library/Application Support/Claude/claude_desktop_config.json` | **High.** `execute_command` types into your Warp tab so terminal action is *visible* alongside the chat. Chat stays focused on reasoning; the terminal becomes the work surface. | ✅ Primary use case |
+| **Cowork** (inside Claude Desktop) | Same config as Claude Desktop | **High.** Same model — your collaborators see the chat; commands run in your Warp pane. | ✅ Yes |
+| **Warp's native agent panel** | `~/.warp/.mcp.json` (see [docs/WARP_AGENT.md](docs/WARP_AGENT.md)) | **High.** Type into Warp's agent panel, agent calls our tools, output renders inline in Warp's chat. Same MCP, same code, second consumer. | ✅ Yes — see WARP_AGENT.md |
+| **Claude Code (CLI)** | `~/.claude.json` | **Marginal — only if you want commands in a *different* Warp tab from the one Claude Code is in.** Claude Code already runs *inside* a terminal pane (Warp or otherwise) and has its own built-in `Bash` tool that spawns subprocesses with pipes. For routine command execution Claude Code's built-in is shorter, faster, and doesn't need TCC permissions. The MCP is only worth registering if you want commands to land *visibly in a separate Warp tab* you control — e.g. as a "scratch" pane you can scroll through later. | ⚠️ Optional, niche |
+| **Other terminals (iTerm2, Terminal.app, Alacritty)** | Any of the above | **Low.** Most of v6.0's value is Warp-specific: `warp://` deeplinks, OSC 777 events, Warp agent integration, launch configs. The 24 server-side tools (clipboard, SSH, env snapshots, file watcher, etc.) work everywhere — but at that point you're using maybe two-thirds of the surface area. | ❌ Look elsewhere |
+
+### Quick decision tree
+
+- **You use Warp + Claude Desktop and want commands visible in your terminal?** → Register here. Primary use case.
+- **You use Warp + Claude Code and want everything in one pane?** → Don't bother. Claude Code's built-in `Bash` tool is enough.
+- **You use Warp + Claude Code and want commands in a *separate* observable Warp tab?** → Register and use `execute_command` deliberately.
+- **You use Warp's native agent panel?** → Register in `~/.warp/.mcp.json`.
+- **You don't use Warp?** → This isn't the right MCP for you. Look at simpler subprocess-based MCPs.
+
+The "39 tools" headline is honest but slightly misleading: 5 of those tools (the AppleScript-keystroke ones — `execute_command`, `execute_with_auto_retrieve`, `execute_with_streaming`, `run_template`, `send_to_session`) are the Warp-routing crown jewels, and 24 of them are pure server-side utilities that any subprocess-based MCP could provide. The remaining 10 sit in between (deeplinks, OSC 777, profiles, file watchers). If the Warp-routing 5 don't appeal, the rest of this MCP is fine but unremarkable.
+
 ## 🎯 Key Features
 
 ### Command Pipelines
