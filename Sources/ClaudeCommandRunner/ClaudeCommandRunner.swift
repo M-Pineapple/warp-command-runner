@@ -809,6 +809,15 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
                         ]),
                         "required": .array([.string("event_type")])
                     ])
+                ),
+                Tool(
+                    name: "shell_shim_status",
+                    description: "Report the status of the optional shell shim — socket path, whether the MCP server is listening, total events received, and the most recent events. The shim is opt-in (helper/install-shim.sh); when active inside a Warp pane it streams preexec/command_finished events to the MCP via a per-uid Unix socket. Observability surface in v6.0; execute_command auto-routing through shim events is deferred to v6.0.x.",
+                    inputSchema: .object([
+                        "type": .string("object"),
+                        "properties": .object([:]),
+                        "required": .array([])
+                    ])
                 )
             ])
         }
@@ -908,6 +917,8 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
                 return await handleFocusWarpSession(params: params, logger: logger)
             case "emit_warp_event":
                 return await handleEmitWarpEvent(params: params, logger: logger)
+            case "shell_shim_status":
+                return await handleShellShimStatus(params: params, logger: logger)
             default:
                 return CallTool.Result(
                     content: [.text("Unknown tool: \(params.name)")],
@@ -920,6 +931,10 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
         let transport = StdioTransport(logger: logger)
         let mcpService = MCPService(server: server, transport: transport)
 
+        // Tier E: optional shell-shim Unix-socket listener. Non-fatal on
+        // failure — shim is opt-in observability.
+        let shimChannel = startShellShimSocketIfPossible(logger: logger)
+
         // Create service group
         let serviceGroup = ServiceGroup(
             services: [mcpService],
@@ -928,6 +943,9 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
         )
 
         logger.info("MCP Server started successfully")
+        if shimChannel != nil {
+            logger.info("Shell shim socket active at \(shellShimSocketPath())")
+        }
         
         // Add error handling for port conflicts
         do {
