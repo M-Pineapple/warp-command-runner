@@ -9,6 +9,11 @@ struct TerminalSession: Codable {
     let name: String
     let terminal: String // TerminalType rawValue
     let tabIndex: Int
+    /// UUID we mint at creation time. Used by `focus_warp_session` *only*
+    /// when externally bound to a real Warp session UUID (e.g. via the
+    /// optional shell shim). The minted value is informational here; we
+    /// don't claim it matches Warp's internal session ID. See TECH.md §4.2.
+    let uuid: String
     let createdAt: Date
     var lastCommandAt: Date
     var commandCount: Int
@@ -28,6 +33,7 @@ actor SessionManager {
             name: name,
             terminal: termKey,
             tabIndex: index,
+            uuid: UUID().uuidString,
             createdAt: Date(),
             lastCommandAt: Date(),
             commandCount: 0
@@ -313,23 +319,44 @@ func handleOpenTerminalTab(params: CallTool.Parameters, logger: Logger) async ->
 
     logger.info("Opening new terminal tab: \(name) in \(terminal.rawValue)")
 
-    // Open new tab
-    let script = newTabAppleScript(for: terminal)
-    let result = executeAppleScript(script, logger: logger)
+    // Pull optional directory once — used by both the deeplink path (Warp)
+    // and the AppleScript+keystroke path (other terminals).
+    let directory: String? = {
+        if let dirArg = arguments["directory"], case .string(let s) = dirArg {
+            return s.isEmpty ? nil : s
+        }
+        return nil
+    }()
 
-    guard result.success else {
-        return CallTool.Result(
-            content: [.text("❌ Failed to open new tab in \(terminal.rawValue): \(result.output)")],
-            isError: true
-        )
-    }
-
-    // Optionally send an initial command (e.g. cd to directory)
-    if let dirArg = arguments["directory"], case .string(let dir) = dirArg {
-        let cdScript = keystrokeSendToCurrentTab(terminal: terminal, command: "cd \"\(dir)\"")
-        executeAppleScript(cdScript, logger: logger)
-        // Small delay for cd to complete
-        try? await Task.sleep(nanoseconds: 500_000_000)
+    // Open new tab — deeplink for Warp, AppleScript for others.
+    if terminal == .warp || terminal == .warpPreview {
+        // v6.0: use warp://action/new_tab — no menu-clicking, no Accessibility
+        // permission required for the open path. Directory is baked into the
+        // URL so no follow-up `cd` keystroke is needed.
+        let r = WarpDeeplinks.openNewTab(directory: directory, logger: logger)
+        guard r.success else {
+            return CallTool.Result(
+                content: [.text("❌ Failed to open new Warp tab: \(r.error ?? "unknown error")")],
+                isError: true
+            )
+        }
+        // Brief delay for Warp to finish creating the tab before any
+        // subsequent send_to_session keystrokes are dispatched.
+        try? await Task.sleep(nanoseconds: 300_000_000)
+    } else {
+        let script = newTabAppleScript(for: terminal)
+        let result = executeAppleScript(script, logger: logger)
+        guard result.success else {
+            return CallTool.Result(
+                content: [.text("❌ Failed to open new tab in \(terminal.rawValue): \(result.output)")],
+                isError: true
+            )
+        }
+        if let dir = directory {
+            let cdScript = keystrokeSendToCurrentTab(terminal: terminal, command: "cd \"\(dir)\"")
+            executeAppleScript(cdScript, logger: logger)
+            try? await Task.sleep(nanoseconds: 500_000_000)
+        }
     }
 
     // Register session
@@ -339,9 +366,10 @@ func handleOpenTerminalTab(params: CallTool.Parameters, logger: Logger) async ->
     ✅ New terminal tab opened: "\(name)"
     • Terminal: \(terminal.rawValue)
     • Tab index: \(session.tabIndex)
+    • Session UUID: \(session.uuid)
     """
 
-    if let dirArg = arguments["directory"], case .string(let dir) = dirArg {
+    if let dir = directory {
         output += "\n• Directory: \(dir)"
     }
 

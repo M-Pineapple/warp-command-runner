@@ -768,6 +768,43 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
                         ]),
                         "required": .array([.string("command")])
                     ])
+                ),
+                // Warp v6.0 — deeplink + OSC 777 surface
+                Tool(
+                    name: "focus_warp_session",
+                    description: "Focus an existing Warp pane by its session UUID via warp://session/<uuid>. The UUID must be one Warp itself recognises (typically obtained from the optional shell shim's OSC 777 session_start event). Locally-minted UUIDs returned by open_terminal_tab are NOT valid here.",
+                    inputSchema: .object([
+                        "type": .string("object"),
+                        "properties": .object([
+                            "warp_uuid": .object([
+                                "type": .string("string"),
+                                "description": .string("Warp's own session UUID for the target pane")
+                            ])
+                        ]),
+                        "required": .array([.string("warp_uuid")])
+                    ])
+                ),
+                Tool(
+                    name: "emit_warp_event",
+                    description: "Build a printf invocation that emits an OSC 777 warp://cli-agent JSON event into Warp's notification UI. The returned printf must be executed inside a Warp pane (e.g. via execute_command) to take effect — our MCP stdout is the JSON-RPC channel and cannot directly write to Warp's PTY.",
+                    inputSchema: .object([
+                        "type": .string("object"),
+                        "properties": .object([
+                            "event_type": .object([
+                                "type": .string("string"),
+                                "description": .string("One of: session_start, prompt_submit, tool_complete, stop, permission_request, idle_prompt")
+                            ]),
+                            "payload": .object([
+                                "type": .string("string"),
+                                "description": .string("JSON-encoded object string for the event payload (default: '{}')")
+                            ]),
+                            "session_id": .object([
+                                "type": .string("string"),
+                                "description": .string("Optional session_id to attach to the event")
+                            ])
+                        ]),
+                        "required": .array([.string("event_type")])
+                    ])
                 )
             ])
         }
@@ -862,6 +899,11 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
                 return await handleListSSHProfiles(params: params, logger: logger)
             case "delete_ssh_profile":
                 return await handleDeleteSSHProfile(params: params, logger: logger)
+            // Warp v6.0 — deeplink + OSC 777 surface
+            case "focus_warp_session":
+                return await handleFocusWarpSession(params: params, logger: logger)
+            case "emit_warp_event":
+                return await handleEmitWarpEvent(params: params, logger: logger)
             default:
                 return CallTool.Result(
                     content: [.text("Unknown tool: \(params.name)")],
