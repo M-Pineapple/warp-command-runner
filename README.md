@@ -4,11 +4,25 @@
   <img src="https://github.com/user-attachments/assets/13d56902-b9d7-4368-b44f-2cefa15bf746">
 </div>
 
-A powerful Model Context Protocol (MCP) server that bridges Claude Desktop and terminal applications, enabling seamless command execution with intelligent output retrieval, command pipelines, real-time streaming, workspace profiles, environment intelligence, and 36 integrated tools.
+A powerful Model Context Protocol (MCP) server that bridges Claude Desktop **and Warp's native agent panel** with terminal applications. v6.0 adds dual-consumer support: the same binary serves both Claude Desktop and Warp's built-in agent. 39 integrated tools.
 
-## 🚀 What's New in v5.0.0
+## 🚀 What's New in v6.0.0 — Warp re-pivot
 
-**Major release: 36 tools, up from 12.** Every feature below is a new MCP tool accessible directly from Claude Desktop.
+**Triggered by Warp going open source** under AGPL-3.0 ([github.com/warpdotdev/warp](https://github.com/warpdotdev/warp)) in May 2026. v6.0 re-establishes Warp as the primary integration target and adds a new install path: **Warp's native agent panel**.
+
+- **Dual-consumer architecture**: register `claude-command-runner` in `~/.warp/.mcp.json` and Warp's built-in agent (which uses your configured LLM — Claude Sonnet, Opus, etc.) calls the same tools Claude Desktop calls. Same binary, same code, two consumers. See [`docs/WARP_AGENT.md`](docs/WARP_AGENT.md).
+- **Deeplinks replace AppleScript** for tab/window operations: `open_terminal_tab` now uses `warp://action/new_tab?path=...`. No menu-clicking, no Accessibility permission for the open path.
+- **OSC 777 emitter** (`emit_warp_event`): build `printf` invocations that surface structured events into Warp's notification UI. Schema reimplemented from upstream `event/v1.rs` (no vendoring).
+- **Workspace profiles → Warp launch configs**: `save_workspace_profile` accepts `include_warp_launch_config: true` to also write a YAML to `~/.warp/launch_configurations/`, making the profile appear in Warp's launch UI.
+- **Optional shell shim** (Tier E, opt-in): `helper/install-shim.sh` adds zsh/bash hooks that emit preexec/command_finished events to a per-uid Unix socket the MCP listens on. Auto-disables outside Warp panes. Observability surface in v6.0; auto-routing `execute_command` through it is deferred to v6.0.x.
+- **Cleanup**: ~460 LOC of dead code removed (obsolete Warp DB integration, orphan TCP listener, unreachable background monitor). Tool count corrected: README claimed 30, reality was 36, v6.0 ships 39.
+- **Reproducible build**: swift-sdk pinned to `0.10.x` with a deterministic `scripts/patch-swift-sdk.sh` so a fresh clone builds without manual patches.
+
+> **Honest caveat:** the "Claude" replying in Warp's agent panel is *Warp's* agent (running whichever LLM you configure in Warp's AI settings), not your Claude Desktop instance. Both can call the MCP; they don't share conversations. v6.0 does not bridge them.
+
+## What's New in v5.0.0 (history)
+
+**v5.0.0: 36 tools, up from 12.**
 
 - **Clipboard Bridge**: Read from and write to the macOS clipboard without leaving the conversation
 - **macOS Notifications**: Get native notifications when long-running commands finish
@@ -137,18 +151,34 @@ cd claude-command-runner
 ./build.sh
 ```
 
-2. Configure Claude Desktop by adding to your MCP settings:
-```json
-{
-  "claude-command-runner": {
-    "command": "/path/to/claude-command-runner/.build/release/claude-command-runner",
-    "args": ["--port", "9876"],
-    "env": {}
-  }
-}
-```
+2. **Pick your consumer(s)** — you can install for one or both:
 
-3. Grant Accessibility permission (required for all command execution):
+   **A — Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+   ```json
+   {
+     "mcpServers": {
+       "claude-command-runner": {
+         "command": "/path/to/claude-command-runner/.build/release/claude-command-runner",
+         "args": []
+       }
+     }
+   }
+   ```
+
+   **B — Warp's native agent** (`~/.warp/.mcp.json`):
+   ```json
+   {
+     "mcpServers": {
+       "claude-command-runner": {
+         "command": "/path/to/claude-command-runner/.build/release/claude-command-runner",
+         "args": []
+       }
+     }
+   }
+   ```
+   See [`docs/WARP_AGENT.md`](docs/WARP_AGENT.md) for the full guide.
+
+3. **Grant Accessibility permission** (only required for `send_to_session` keystroke injection in v6.0; tab/window opening uses deeplinks and does not require it):
    - Open **System Settings → Privacy & Security → Accessibility**
    - Click **+** and navigate to `claude-command-runner/.build/release/`
    - Press **Cmd+Shift+.** to reveal the hidden `.build` folder
@@ -156,11 +186,17 @@ cd claude-command-runner
 
 > **Important:** macOS tracks permissions by binary identity. After every rebuild (`./build.sh`), you must remove the old entry and re-add the new binary in Accessibility settings.
 
-4. Restart Claude Desktop
+4. **Restart your client(s)** (Claude Desktop and/or Warp).
+
+5. **(Optional)** Install the shell shim for cleaner block-boundary capture:
+   ```bash
+   helper/install-shim.sh
+   ```
+   See `helper/shell-shim.zsh` / `helper/shell-shim.bash` for the implementation. Uninstall with `helper/uninstall-shim.sh`.
 
 ## Usage
 
-### Available Tools (30)
+### Available Tools (39)
 
 #### Core Execution
 
@@ -465,9 +501,9 @@ The MCP binary requires **Accessibility** permission to send commands to your te
 ---
 
 ### MCP Not Responding
-1. Check if the server is running: `lsof -i :9876`
-2. Restart Claude Desktop
-3. Rebuild with `./build.sh`
+1. Check the client logs (Claude Desktop or Warp). The MCP server runs as a child of the client over stdio — there is no listening TCP port in v6.0.
+2. Restart the client (Claude Desktop and/or Warp).
+3. Rebuild with `./build.sh`. (And re-add the binary to Accessibility if `send_to_session` is failing.)
 
 ### Commands Not Appearing in Terminal
 1. Ensure Warp/WarpPreview is running
@@ -511,21 +547,37 @@ If commands execute but aren't saved to the database:
 ## Architecture
 
 ```
-┌─────────────────┐         ┌──────────────────┐         ┌────────────────┐
-│ Claude Desktop  │ ←────→  │ Command Runner   │ ←────→  │ Warp Terminal  │
-│                 │  MCP    │ MCP Server v5.0  │ Script  │                │
-│ • 30 Tools      │         │ • Port 9876      │         │ • Execute      │
-│ • Pipelines     │         │ • Templates      │         │ • Capture      │
-│ • Streaming     │         │ • SQLite DB      │         │ • Stream       │
-│ • Profiles      │         │ • File Watchers  │         │ • Multi-tab    │
-│ • Clipboard     │         │ • SSH Profiles   │         │ • Return       │
-└─────────────────┘         └──────────────────┘         └────────────────┘
-                                     │
-                            ┌────────┴────────┐
-                            │  Remote Hosts   │
-                            │  (via SSH)      │
-                            └─────────────────┘
+  ┌──────────────────┐                     ┌──────────────────┐
+  │  Claude Desktop  │                     │   Warp Agent     │
+  │   (TS client)    │                     │  (rmcp client)   │
+  └────────┬─────────┘                     └────────┬─────────┘
+           │ stdio                                  │ stdio
+           │ MCP                                    │ MCP
+           └──────────────────┬─────────────────────┘
+                              ▼
+              ┌─────────────────────────────────┐
+              │   claude-command-runner v6.0    │
+              │      (Swift, MCP server)        │
+              │      • 39 tools                 │
+              └─────────┬─────────┬─────────────┘
+                        │         │
+              ┌─────────┘         └──────────────┐
+              ▼                                  ▼
+   ┌────────────────────┐          ┌─────────────────────────┐
+   │   Warp Terminal    │          │   Optional shell shim   │
+   │  warp:// deeplinks │◀────────▶│ /tmp/ccr-shell-shim-    │
+   │  OSC 777 events    │          │   <uid>.sock (NIO)      │
+   │  AppleScript (typ) │          │   preexec/finished      │
+   └────────────────────┘          └─────────────────────────┘
+                        │
+                        ▼
+               ┌─────────────────┐
+               │   Remote Hosts  │
+               │    (via SSH)    │
+               └─────────────────┘
 ```
+
+Two MCP consumers, one server. Tab/window operations use Warp's `warp://` URL scheme; status events use OSC 777 (printf-built); typing into a specific tab still uses AppleScript keystrokes (no Warp API exists for that). Optional shell shim adds clean preexec / command_finished events over a per-uid Unix socket.
 
 ## Contributing
 

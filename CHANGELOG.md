@@ -5,6 +5,70 @@ All notable changes to Claude Command Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.0] - 2026-05-07 — Warp re-pivot
+
+This release is a **re-pivot back to Warp Terminal**, triggered by Warp going open source under AGPL-3.0 ([github.com/warpdotdev/warp](https://github.com/warpdotdev/warp)) in early May 2026. It re-establishes Warp as the primary integration target, replaces fragile AppleScript paths with documented surfaces, and adds a new install path: **Warp's native agent panel** as a first-class consumer alongside Claude Desktop.
+
+### Headline
+
+`claude-command-runner` is now a **dual-consumer MCP server**: the same binary serves both Claude Desktop and Warp's built-in agent. Same code, same tools, just two consumers. See [`docs/WARP_AGENT.md`](docs/WARP_AGENT.md) for the new install path.
+
+### Added
+
+- **Warp Agent registration story** (Tier D). Documented `~/.warp/.mcp.json` setup so Warp's native agent panel can call our tools. Sample at `config/warp-agent-mcp.json`.
+- **`focus_warp_session`** tool — dispatches `warp://session/<uuid>` to focus a previously-opened pane. Requires a UUID Warp itself recognises (typically from the optional shell shim's OSC 777 stream).
+- **`emit_warp_event`** tool — builds a `printf` invocation that emits an OSC 777 `warp://cli-agent` JSON event into Warp's notification UI. Schema reimplemented from upstream `event/v1.rs`. Surfaces session_start / prompt_submit / tool_complete / stop / permission_request / idle_prompt.
+- **`shell_shim_status`** tool — reports the optional shell shim's listening state and recent events.
+- **Optional shell shim** (Tier E, opt-in beta, `helper/install-shim.sh`). Adds zsh/bash hooks that emit preexec/command_finished events to a per-uid Unix domain socket the MCP listens on. Auto-disables outside Warp panes (gated on `$WARP_SESSION_ID`). Observability surface in v6.0; `execute_command` auto-routing through shim events is deferred to v6.0.x.
+- **Workspace profiles → Warp launch configs** (Tier C). `save_workspace_profile` accepts `include_warp_launch_config: true`; when set, also writes a YAML to `~/.warp/launch_configurations/<name>.yaml` so the profile appears in Warp's launch UI. Schema reimplemented from upstream `LaunchConfig` / `TabTemplate` / `PaneTemplateType` / `CommandTemplate`. Env vars are not emitted into the YAML (Warp's schema does not have a top-level env map); they remain in the private CCR JSON.
+- **Session UUID tracking** — `TerminalSession` now carries a locally-minted UUID (returned by `open_terminal_tab`). Used by our registry; not bound to Warp's internal session UUID.
+- **`PRODUCT.md` and `TECH.md`** — checked-in product/tech specs for v6.0.
+
+### Changed
+
+- **`open_terminal_tab` (Warp path)** uses `warp://action/new_tab?path=...` instead of clicking `menu item "New Tab"` via System Events. The open path no longer requires Accessibility permission. Directory is baked into the URL — no follow-up `cd` keystroke. AppleScript path remains for iTerm2 / Terminal / Alacritty (unchanged).
+- **`README.md`** — rewritten for the dual-consumer story. Tool count corrected from 30 to 39 (was previously under-counted; v6.0 adds 3 new).
+- **swift-sdk pinned to `0.10.x`** with a reproducible patch script (`scripts/patch-swift-sdk.sh`). Previous loose `from: "0.1.0"` resolved 0.9.0 and failed under current Swift toolchains. The patch applies `nonisolated(unsafe)` to two `Bool` decls in `NetworkTransport.swift`. Build is reproducible from a fresh clone via `./build.sh`.
+- **`config/`** — dropped `--port 9876` and `--verbose` from the example `claude_desktop_config.json` (port 9876 was for the now-deleted TCP listener). Removed `warp-mcp-config.json` and `warp-mcp-config-correct.json`; replaced with a single canonical `warp-agent-mcp.json`.
+
+### Removed (dead code)
+
+- `WarpDatabaseIntegration.swift` (260 LOC) — never reached from any registered tool. Hardcoded Warp SQLite schema; would silently break on Warp updates.
+- `CommandReceiverService.swift` (201 LOC) — TCP listener on `127.0.0.1:9876` with mock-only handlers; never invoked from production. The live `MCPService` struct that was sharing the file has been extracted to its own file.
+- `CommandHistoryManager.loadFromWarpDatabase` and the `warpDB` property — neither was reachable.
+- The unreachable `Task`-based background monitor in `CommandHandlers.swift` — dispatch goes through `CommandHandlersStable`. The dead Task was the prior crash trigger.
+
+### Fixed
+
+- README claimed 30 tools; the dispatch table actually registered 36. Six previously-undocumented tools surfaced: `set_notification_preference`, `cleanup_sessions`, `list_file_watches`, `delete_workspace_profile`, `list_ssh_profiles`, `delete_ssh_profile`. With v6.0's three new tools (`focus_warp_session`, `emit_warp_event`, `shell_shim_status`), the live count is **39**.
+
+### Tool count
+
+| Version | Tools | Note |
+|---|---|---|
+| v5.0.0 advertised | 30 | README claim |
+| v5.0.0 actual | 36 | dispatch table |
+| **v6.0.0** | **39** | dispatch table |
+
+### Migration
+
+- **Existing Claude Desktop users:** edit `claude_desktop_config.json` to drop `--port 9876` from `args`. The MCP server still tolerates the flag (it's parsed and ignored), but it serves no purpose post-v6.0.
+- **New Warp Agent users:** see [`docs/WARP_AGENT.md`](docs/WARP_AGENT.md).
+- **Optional shim users:** `helper/install-shim.sh` adds a clearly-marked block to your `~/.zshrc` or `~/.bashrc`. `helper/uninstall-shim.sh` removes it.
+- **Build:** run `./build.sh` (now invokes `scripts/patch-swift-sdk.sh` automatically). Or for manual builds: `swift package resolve && ./scripts/patch-swift-sdk.sh && swift build -c release`.
+
+### Non-goals (deliberately out of scope)
+
+- Bridging Claude Desktop conversations into Warp (would require server-push; reinvents Claude Code).
+- Replacing Claude Code as a TUI agent in a Warp pane.
+- Reading Warp's internal SQLite (~80 Diesel migrations in 5 years; schema unstable).
+- Becoming a Warp plugin (no third-party plugin API exists; `CLIAgent` registry is a closed enum).
+- Wave Terminal support (the prior local repurposing was incorrect; Wave is not a target).
+
+### AGPL hygiene
+
+Warp is AGPL-3.0. Our MCP communicates with Warp over IPC (`warp://` URLs and OSC escape sequences) and through the MCP protocol — copyleft does not propagate. **No Warp source is vendored.** All schemas (OSC 777 event JSON, launch config YAML) are reimplemented from observed shape, not copied.
+
 ## [5.0.2] - 2026-02-19
 
 ### Fixed
