@@ -2,7 +2,7 @@
   "mcpServers": {
     "claude-command-runner": {
       "command": "/Users/username/yourfilepath/claude-command-runner/.build/release/claude-command-runner",
-      "args": ["--port", "9876", "--verbose"]
+      "args": []
     }
   }
 }

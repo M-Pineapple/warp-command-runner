@@ -1,9 +1,0 @@
-{
-  "claude-command-runner": {
-    "command": "/Users/username/yourfilepath/claude-command-runner/.build/release/claude-command-runner",
-    "args": ["--port", "9876"],
-    "env": {},
-    "working_directory": null,
-    "start_on_launch": true
-  }
-}

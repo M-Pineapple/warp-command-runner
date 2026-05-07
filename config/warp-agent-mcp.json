@@ -1,0 +1,9 @@
+{
+  "_comment": "v6.0 — register claude-command-runner with Warp's native agent panel. Save this content to ~/.warp/.mcp.json (or merge with an existing one). Warp's built-in agent will pick it up and call our tools just like Claude Desktop does. Same binary; two consumers.",
+  "mcpServers": {
+    "claude-command-runner": {
+      "command": "/Users/username/yourfilepath/claude-command-runner/.build/release/claude-command-runner",
+      "args": []
+    }
+  }
+}
