@@ -380,34 +380,13 @@ func handleExecuteCommandV2(params: CallTool.Parameters, logger: Logger, config:
         
         if process.terminationStatus == 0 {
             // Command sent successfully
-            logger.info("Command sent to \(preferredTerminal.rawValue), monitoring for output...")
-            
-            // Start monitoring for output in background
-            Task {
-                if let result = try? await waitForCommandOutput(commandId: commandId, timeout: 60, logger: logger) {
-                    logger.info("Command output received:")
-                    logger.info("Exit code: \(result.exitCode)")
-                    logger.info("Output: \(result.output)")
-                    if !result.error.isEmpty {
-                        logger.info("Error: \(result.error)")
-                    }
-                    
-                    // Store the result for retrieval
-                    await commandResultsStore.store(result)
-                    
-                    // Update database record
-                    _ = DatabaseManager.shared.updateCommand(
-                        commandId,
-                        stdout: result.output,
-                        stderr: result.error,
-                        exitCode: Int(result.exitCode),
-                        completedAt: Date()
-                    )
-                } else {
-                    logger.warning("Timeout waiting for command output")
-                }
-            }
-            
+            logger.info("Command sent to \(preferredTerminal.rawValue)")
+
+            // Background monitoring removed in v6.0: this code path is unreachable
+            // (dispatch uses handleExecuteCommandStable instead) and the prior
+            // implementation triggered server crashes under concurrent dispatch.
+            // The Stable path captures output via /tmp/<id>.json polling synchronously.
+
             // Include caution warning if command was flagged
             let cautionPrefix: String
             if interactivityCheck.level == .cautious {

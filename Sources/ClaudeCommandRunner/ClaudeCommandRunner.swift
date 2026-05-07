@@ -873,19 +873,15 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
         // Create transport and start server
         let transport = StdioTransport(logger: logger)
         let mcpService = MCPService(server: server, transport: transport)
-        
-        // Create command receiver service
-        let commandReceiver = CommandReceiverService(port: actualPort, server: server, logger: logger)
-        
+
         // Create service group
         let serviceGroup = ServiceGroup(
-            services: [mcpService, commandReceiver],
+            services: [mcpService],
             gracefulShutdownSignals: [.sigterm, .sigint],
             logger: logger
         )
-        
+
         logger.info("MCP Server started successfully")
-        logger.info("Command receiver listening on port \(actualPort)")
         
         // Add error handling for port conflicts
         do {

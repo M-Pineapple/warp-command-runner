@@ -215,11 +215,9 @@ public enum ExportError: Error {
 /// Command history manager for loading from various sources
 public class CommandHistoryManager {
     private let logger: Logger?
-    private let warpDB: WarpDatabaseIntegration?
-    
+
     public init(logger: Logger? = nil) {
         self.logger = logger
-        self.warpDB = WarpDatabaseIntegration()
     }
     
     /// Load history from Claude Command Runner's execution cache
@@ -256,51 +254,4 @@ public class CommandHistoryManager {
         return entries.sorted { $0.timestamp > $1.timestamp }
     }
     
-    /// Load history from Warp database
-    public func loadFromWarpDatabase(limit: Int = 1000) -> [CommandHistoryEntry] {
-        guard let warpDB = warpDB else { return [] }
-        
-        let commands = warpDB.getClaudeCommands(limit: limit)
-        
-        return commands.compactMap { cmd in
-            guard let commandText = cmd["command"] as? String,
-                  let commandId = cmd["command_id"] as? String else {
-                return nil
-            }
-            
-            // Parse timestamps
-            let timestamp: Date
-            if let startTime = cmd["start_time"] as? String {
-                let formatter = DateFormatter()
-                formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-                timestamp = formatter.date(from: startTime) ?? Date()
-            } else {
-                timestamp = Date()
-            }
-            
-            // Calculate duration if completed
-            var duration: TimeInterval?
-            if let startTime = cmd["start_time"] as? String,
-               let completedTime = cmd["completed_time"] as? String {
-                let formatter = DateFormatter()
-                formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-                if let start = formatter.date(from: startTime),
-                   let end = formatter.date(from: completedTime) {
-                    duration = end.timeIntervalSince(start)
-                }
-            }
-            
-            return CommandHistoryEntry(
-                id: commandId,
-                command: commandText,
-                output: "", // Warp DB doesn't store output
-                error: "",
-                exitCode: Int32(cmd["exit_code"] as? Int ?? -1),
-                timestamp: timestamp,
-                workingDirectory: cmd["working_directory"] as? String,
-                terminal: "Warp",
-                duration: duration
-            )
-        }
-    }
 }

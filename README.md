@@ -4,11 +4,11 @@
   <img src="https://github.com/user-attachments/assets/13d56902-b9d7-4368-b44f-2cefa15bf746">
 </div>
 
-A powerful Model Context Protocol (MCP) server that bridges Claude Desktop and terminal applications, enabling seamless command execution with intelligent output retrieval, command pipelines, real-time streaming, workspace profiles, environment intelligence, and 30 integrated tools.
+A powerful Model Context Protocol (MCP) server that bridges Claude Desktop and terminal applications, enabling seamless command execution with intelligent output retrieval, command pipelines, real-time streaming, workspace profiles, environment intelligence, and 36 integrated tools.
 
 ## 🚀 What's New in v5.0.0
 
-**Major release: 30 tools, up from 12.** Every feature below is a new MCP tool accessible directly from Claude Desktop.
+**Major release: 36 tools, up from 12.** Every feature below is a new MCP tool accessible directly from Claude Desktop.
 
 - **Clipboard Bridge**: Read from and write to the macOS clipboard without leaving the conversation
 - **macOS Notifications**: Get native notifications when long-running commands finish
