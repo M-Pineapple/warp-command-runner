@@ -118,7 +118,7 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
         // Create the MCP server
         let server = Server(
             name: "Claude Command Runner",
-            version: "6.0.3",
+            version: "6.0.4",
             capabilities: .init(
                 tools: .init(listChanged: false)
             )

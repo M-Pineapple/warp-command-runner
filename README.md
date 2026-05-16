@@ -225,38 +225,137 @@ cd claude-command-runner
    ```
    See `helper/shell-shim.zsh` / `helper/shell-shim.bash` for the implementation. Uninstall with `helper/uninstall-shim.sh`.
 
-### Stable code signing (recommended for the 5 keystroke-routing tools)
+### 🛡️ macOS Sequoia full setup recipe (the 7 ordered steps)
 
-**Without stable signing**, every `swift build` produces an ad-hoc binary with a new cdhash. macOS treats each rebuild as a new program, orphaning any TCC permission grants from previous builds. Symptom: `osascript is not allowed to send keystrokes (1002)` silently reappears after every `git pull && ./build.sh`, even though System Settings → Privacy & Security toggles still look correct. This affects the 5 AppleScript-routed tools: `execute_command`, `execute_with_auto_retrieve`, `execute_with_streaming`, `run_template`, `send_to_session`. The other 34 tools are unaffected.
+> If `execute_command` / `execute_with_auto_retrieve` / `execute_with_streaming` / `run_template` / `send_to_session` fail with `osascript is not allowed to send keystrokes (1002)` even though you've toggled every panel in System Settings, **follow this in order — skipping any step leaves a silent denial somewhere in the chain.** The other 34 tools work without any of this; `execute_pipeline` is a fully-functional substitute if you want to skip the whole TCC saga entirely.
+>
+> This is the empirically-verified recipe from a real 6-hour debugging session. v6.0.3+ ships the bundle infrastructure that makes this possible; v6.0.4 is this documentation pass.
 
-**Fix:** sign the binary with a stable certificate so the cdhash stays constant across rebuilds. Grant TCC once, it persists.
+**The denial pattern.** macOS Sequoia's TCC and sandbox have layered, *non-obvious* requirements for CLI binaries that drive `osascript → System Events → keystroke`. The error message is misleading — the actual block usually isn't keystroke permission; it's an earlier preflight check that silently aborts the chain. The five gates, in the order macOS evaluates them:
 
-**One-time setup (~2 minutes):**
+| Gate | TCC service | What grants it |
+|---|---|---|
+| 1. Bundle promptability | (n/a — policy) | Bundle in `/Applications/`, not `.build/release/` |
+| 2. Bundle identity stable | (n/a — codesign) | Signed with a stable cert (cdhash doesn't drift across rebuilds) |
+| 3. Sandbox FDA preflight | `kTCCServiceSystemPolicyAllFiles` | Full Disk Access grant on the bundle |
+| 4. AppleEvents | `kTCCServiceAppleEvents` | Automation → System Events ☑ |
+| 5. Keystroke synthesis | `kTCCServiceListenEvent` / `kTCCServicePostEvent` | Input Monitoring + Accessibility |
 
-1. Open **Keychain Access** → menu **Keychain Access → Certificate Assistant → Create a Certificate…**
-2. Name: `claude-command-runner` (or anything memorable)
-3. Identity Type: **Self Signed Root**
-4. Certificate Type: **Code Signing**
-5. Click **Create** → **Continue** through any warnings → **Done**
+#### Step 1 — Have an Apple Development cert (or self-signed Code Signing cert)
 
-**Per-build:** export the cert name before invoking `./build.sh`:
+If you have a paid Apple Developer account, you already have one (check via `security find-identity -v -p codesigning`). If not, create a self-signed one:
+
+1. **Keychain Access** → menu **Certificate Assistant → Create a Certificate…**
+2. Name: `claude-command-runner`, Identity Type: **Self Signed Root**, Certificate Type: **Code Signing**
+3. Click **Create** → **Continue** through warnings → **Done**
+
+Export the cert identifier for `build.sh` to find:
+```bash
+# Get the SHA-1 hash (more reliable than the cert name)
+security find-identity -v -p codesigning
+# Then in your shell rc (~/.zshrc, ~/.config/fish/config.fish, etc.):
+export CCR_CODESIGN_IDENTITY="<the-sha1-hash-from-above>"
+```
+
+#### Step 2 — Build (creates the signed `.app` bundle)
 
 ```bash
-export CCR_CODESIGN_IDENTITY="claude-command-runner"
 ./build.sh
 ```
 
-Add the export to your shell rc to make it persistent. The build script detects the env var and runs `codesign --force --sign "$CCR_CODESIGN_IDENTITY" --identifier claude-command-runner --options runtime` on the binary after compilation. The cdhash is now stable; TCC grants survive future rebuilds indefinitely.
+`build.sh` invokes `scripts/make-app-bundle.sh`, which wraps the CLI in `.build/release/claude-command-runner.app/` with a proper `Info.plist` (CFBundleIdentifier `com.m-pineapple.claude-command-runner`, the three required `NSXxxUsageDescription` strings, LSUIElement=true). If `CCR_CODESIGN_IDENTITY` is set, the bundle is signed with that cert as a unit — stable cdhash across rebuilds.
 
-**Verification after build:**
+**Verify:**
 ```bash
-codesign --display --verbose=4 .build/release/claude-command-runner | grep -E 'Signature|CDHash'
+codesign --display --verbose=4 .build/release/claude-command-runner.app | grep -E 'Identifier|TeamIdentifier|CDHash'
+codesign --verify --deep --strict .build/release/claude-command-runner.app  # should succeed silently
 ```
-Should show `Signature size=...` (not `adhoc`) and a consistent `CandidateCDHash` value across rebuilds.
 
-**For wider distribution:** if you have a paid Apple Developer account, use a **Developer ID Application** certificate instead — same flow, different cert. Then other users can install pre-built binaries from your GitHub Releases and macOS won't refuse them.
+#### Step 3 — Install the bundle into `/Applications/` (CRITICAL)
 
-**If you skip this:** `execute_pipeline` is a fully-working alternative for everything `execute_command` does. No TCC permissions required. See the "Why this is so painful" section under Troubleshooting for the full story.
+**macOS refuses to prompt for TCC permissions on bundles in `.build/release/` or other dev directories.** The bundle must live in `/Applications/`. Copy it:
+
+```bash
+cp -R .build/release/claude-command-runner.app "/Applications/Claude Command Runner.app"
+```
+
+Verify the signature survived the copy:
+```bash
+codesign --verify --deep --strict "/Applications/Claude Command Runner.app"
+```
+
+#### Step 4 — Point your MCP config at the `/Applications/` path
+
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "claude-command-runner": {
+      "command": "/Applications/Claude Command Runner.app/Contents/MacOS/claude-command-runner",
+      "args": []
+    }
+  }
+}
+```
+
+Mirror in `~/.warp/.mcp.json` if you use the Warp Agent path.
+
+#### Step 5 — Reset stale TCC entries for the bundle ID
+
+If you've been struggling with TCC denials previously, your TCC.db likely has stale `Denied` entries from earlier rebuilds with different cdhashes. Wipe them for the bundle:
+
+```bash
+for svc in AppleEvents ListenEvent PostEvent Accessibility; do
+    tccutil reset "$svc" com.m-pineapple.claude-command-runner
+done
+```
+
+Each line should print "Successfully reset". If you see "no entries", that's also fine — means TCC had nothing recorded yet.
+
+#### Step 6 — Grant the *three* TCC permissions (Full Disk Access is the surprise one)
+
+In **System Settings → Privacy & Security**, add `/Applications/Claude Command Runner.app` to each of:
+
+1. **Full Disk Access** — *unexpected but mandatory.* macOS sandbox does a preflight check for `kTCCServiceSystemPolicyAllFiles` before allowing osascript to spawn for keystroke chains. Without FDA on the bundle, the sandbox denies before TCC's AppleEvents check ever fires, and you get the misleading "send keystrokes" error.
+2. **Input Monitoring** — for `kTCCServiceListenEvent` / `kTCCServicePostEvent` (synthetic keystroke generation).
+3. **Accessibility** — for the `keystroke` AppleEvent action itself.
+
+Each grant requires Touch ID / admin password to confirm. **Bundle name appears as "Claude Command Runner"** in the panels.
+
+#### Step 7 — Restart Claude Desktop, trigger once, grant the Automation prompt
+
+`⌘Q` Claude Desktop, reopen. On your first `execute_command`, macOS may show one more prompt — **Automation → "Claude Command Runner wants to control System Events"** — click Allow. After that, it's permanent. Future rebuilds don't reset anything (the cert keeps cdhash stable; the bundle keeps the identity stable).
+
+---
+
+### Diagnostic: what does TCC see right now?
+
+If something doesn't work after the recipe, the only reliable way to figure out which gate is failing is the TCC log:
+
+```bash
+log show --predicate 'process == "tccd"' --last 30s --info --debug \
+    | grep -E 'AUTHREQ_CTX|AUTHREQ_RESULT|m-pineapple|promptPolicy|Service Policy'
+```
+
+Trigger an `execute_command` first, then immediately run the above. Read it for:
+- `service="kTCCServiceXxx"` — which permission category is being checked
+- `promptPolicy = 0` → macOS refuses to even prompt; usually a location problem (bundle not in `/Applications/`)
+- `promptPolicy = 2` + `Denied (Service Policy)` → you're missing the permission for the named service
+- `AttributionChain: responsible={identifier=com.m-pineapple.claude-command-runner, ...}` → good, TCC is identifying us correctly
+
+### If you really can't get it working
+
+`execute_pipeline` is a fully-functional substitute for `execute_command`:
+
+```jsonc
+// instead of execute_command: {"command": "git status"}
+// use:
+{"steps": [{"command": "git status"}]}
+```
+
+Pure subprocess, no AppleScript, no TCC layer, captures output cleanly, works on any macOS version regardless of permissions. The visible side-effect (command appearing in your Warp tab) is the only thing you lose — for most agent workflows that's not what you actually need anyway.
+
+---
 
 ## Usage
 
@@ -525,56 +624,29 @@ For longer commands, use `execute_with_streaming` instead.
 
 ### macOS Permission Error: "osascript is not allowed to send keystrokes" (Error 1002)
 
-This error occurs when macOS blocks AppleScript automation. It's common after fresh macOS installs, major updates (like Sequoia/Tahoe), or when the Automation permissions cache becomes corrupted. **Five out of 39 tools depend on this path** (`execute_command`, `execute_with_auto_retrieve`, `execute_with_streaming`, `run_template`, `send_to_session`); the other 34 are unaffected and continue to work even while this is broken.
+This error affects the 5 AppleScript-keystroke-routed tools (`execute_command`, `execute_with_auto_retrieve`, `execute_with_streaming`, `run_template`, `send_to_session`). The other 34 tools — including `execute_pipeline` — are unaffected.
 
-**Symptoms:**
-- Error message: `System Events got an error: osascript is not allowed to send keystrokes. (1002)`
-- Toggling permissions off/on in System Settings doesn't help
-- No permission prompt appears when the MCP tries to run
+**Don't waste hours toggling System Settings panels.** This is a layered problem with macOS Sequoia's TCC + sandbox enforcement, and partial fixes leave silent denials in deeper layers. The canonical fix is the [**🛡️ macOS Sequoia full setup recipe**](#-macos-sequoia-full-setup-recipe-the-7-ordered-steps) above (in the Installation section) — seven ordered steps including: build the `.app` bundle, install into `/Applications/` (not `.build/`), `tccutil reset` for the bundle ID, and grant THREE TCC permissions including the surprise one (**Full Disk Access** on the bundle — sandbox preflights this before allowing the keystroke chain). Follow it top to bottom; skipping any step leaves a hidden denial.
 
-**Why this is so painful** (lesson from a real v6.0 install):
+**Quick triage — am I hitting this?**
 
-The MCP server runs as a **child process of Claude Desktop**. When it spawns `osascript`, modern macOS attributes the AppleEvent action to the **responsible top-level process** — Claude Desktop — not to the transient child binary. This means:
+Run this immediately after a failed `execute_command`:
+```bash
+log show --predicate 'process == "tccd"' --last 20s --info --debug | grep -E 'm-pineapple|promptPolicy|Service Policy'
+```
+You'll see one of:
+- `promptPolicy = 0` → bundle isn't in `/Applications/` (or no bundle at all). Fix: Steps 2-3 of the recipe.
+- `promptPolicy = 2` + `Denied (Service Policy)` for `kTCCServiceSystemPolicyAllFiles` → missing Full Disk Access on the bundle. Fix: Step 6 of the recipe.
+- `AttributionChain: responsible={identifier=claude-command-runner, ...}` (no `m-pineapple`) → you're not running from the bundle, you're running the bare binary. Fix: re-run `./build.sh` and update your MCP config to the `.app` path (Steps 2-4 of the recipe).
 
-- ✅ Adding `claude-command-runner` to Accessibility — needed but **not sufficient**
-- ✅ Adding `Claude` (Claude Desktop) to Accessibility — needed
-- ✅ Granting Warp Full Disk Access — **irrelevant** (wrong process attribution; wrong category)
-- ✅ Restarting Claude Desktop / Warp — clears in-process cache only, not the system-level TCC denial
-- ❌ **Step 5 below (manual osascript trigger from a real shell) is mandatory** — it's the only thing that causes macOS to re-evaluate the chain and re-prompt
-
-**Solution (do all steps in order — do not skip 5):**
-
-1. **Reset Automation permissions** (this resets ALL Automation permissions, not just for this app):
-   ```bash
-   tccutil reset AppleEvents
-   ```
-
-2. **Full Mac restart** (not just logout — a complete shutdown is required)
-
-3. **Open your terminal app first** (Warp, WarpPreview, or whichever you use)
-
-4. **Open Claude Desktop**
-
-5. **🚨 Critical — trigger a fresh permission prompt manually** by running this in your terminal (not from Claude — from a shell *you* opened):
-   ```bash
-   osascript -e 'tell application "System Events" to keystroke "x"'
-   ```
-   The letter `x` will be typed wherever your cursor is — that's expected and harmless. The point is to make macOS evaluate the AppleEvents request from a fresh source so it prompts you. Skipping this step is why most "I did everything but it still says 1002" issues happen.
-
-6. **Grant permission** when macOS prompts you
-
-7. **Try the MCP command again** — it should now work and Claude.app will appear in the **System Settings → Privacy & Security → Automation** list
-
-**Workaround until you have time to do all this:** `execute_pipeline` is a fully-functional substitute for `execute_command`. It uses pure subprocess (`/bin/bash -c`), needs zero macOS permissions, captures output cleanly, and supports the same use cases. Wrap a single command as a 1-step pipeline:
-```json
+**Workaround if you don't want to bother with the recipe:**
+```jsonc
+// Use execute_pipeline instead of execute_command:
 {"steps": [{"command": "git status"}]}
 ```
+Pure subprocess, no AppleScript, zero TCC. Works on any macOS regardless of permissions. The 34 non-keystroke tools all work too.
 
-**Notes:**
-- A simple toggle reset or targeted `tccutil` command often doesn't work — the full AppleEvents reset plus restart is usually required.
-- After every `swift build`, the binary's identity (cdhash) changes because we're ad-hoc signed. The Accessibility entry for `claude-command-runner` may go stale. Remove and re-add the entry, OR rely on the Claude Desktop entry (which is what actually matters for the responsibility chain).
-
-**Bundle ID Reference:** Claude Desktop uses `com.anthropic.claudefordesktop`
+**Bundle ID Reference:** `com.m-pineapple.claude-command-runner` (this project), `com.anthropic.claudefordesktop` (Claude Desktop).
 
 ---
 

@@ -5,6 +5,34 @@ All notable changes to Claude Command Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.4] - 2026-05-16 — full macOS Sequoia TCC setup recipe documented
+
+### Why this release exists
+
+v6.0.3 shipped the `.app` bundle wrapper. Verifying it end-to-end on a live install revealed a fifth layer of macOS Sequoia's TCC enforcement that wasn't obvious from the code: **`kTCCServiceSystemPolicyAllFiles` (Full Disk Access) is checked by the sandbox preflight before the AppleEvents/Input Monitoring chain even runs.** Bundle ID grants in System Settings → Privacy & Security → Automation/Input Monitoring don't help if the bundle lacks Full Disk Access — sandboxd denies first, the user sees the misleading "send keystrokes" error, and they spend hours toggling the wrong panels.
+
+Once FDA is granted to the bundle (in addition to Automation, Input Monitoring, and Accessibility), the chain works permanently. Empirically verified on macOS Sequoia 26.x with a 6-hour debugging session captured in detail.
+
+### Documentation
+
+- **README "🛡️ macOS Sequoia full setup recipe (the 7 ordered steps)"** — a new top-level section under Installation replacing the old "Stable code signing" section. Documents the empirically-verified procedure for getting the 5 keystroke-routing tools working on macOS Sequoia:
+    1. Have an Apple Development cert (or self-signed Code Signing cert) in Keychain
+    2. `./build.sh` produces the `.app` bundle at `.build/release/claude-command-runner.app/`
+    3. **Copy the bundle into `/Applications/`** (TCC refuses to prompt for bundles in dev directories — this was the second-to-last layer)
+    4. Point Claude Desktop / Warp Agent config at the `/Applications/` bundle path
+    5. `tccutil reset AppleEvents/ListenEvent/PostEvent/Accessibility` for the bundle ID
+    6. Grant THREE permissions in System Settings → Privacy & Security: Full Disk Access (the surprise), Input Monitoring, Accessibility
+    7. Restart Claude Desktop, accept the Automation prompt on first `execute_command`
+- Includes the diagnostic command for reading the TCC log (`log show --predicate 'process == "tccd"'`) and what to look for in the output (`promptPolicy=0` vs `=2`, `Service Policy: Denied`, attribution chain identifier).
+- **README "Error 1002" troubleshooting** rewritten to point users at the canonical recipe instead of repeating outdated partial fixes. Adds a quick-triage matrix mapping log signals to specific recipe steps.
+- **MCP `serverInfo.version` 6.0.3 → 6.0.4**.
+
+### Notes
+
+- No code changes — pure documentation pass that captures real install experience.
+- Tool count unchanged at 39.
+- The bundle architecture from v6.0.3 stays exactly as-is; this release is about helping the next user avoid the trap.
+
 ## [6.0.3] - 2026-05-16 — .app bundle wrapper (TCC prompts actually appear now)
 
 ### Why this release exists
