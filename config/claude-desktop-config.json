@@ -1,7 +1,8 @@
 {
+  "_comment": "v6.0.3+: point at the binary INSIDE the .app bundle. The .app wrapper is required for the 5 keystroke-routing tools (execute_command etc.) to work — without the embedded Info.plist, macOS Sequoia silently denies TCC prompts. The other 34 tools work either way.",
   "mcpServers": {
     "claude-command-runner": {
-      "command": "/Users/username/yourfilepath/claude-command-runner/.build/release/claude-command-runner",
+      "command": "/Users/username/yourfilepath/claude-command-runner/.build/release/claude-command-runner.app/Contents/MacOS/claude-command-runner",
       "args": []
     }
   }

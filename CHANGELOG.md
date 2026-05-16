@@ -5,6 +5,47 @@ All notable changes to Claude Command Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.3] - 2026-05-16 — .app bundle wrapper (TCC prompts actually appear now)
+
+### Why this release exists
+
+v6.0.2 added stable code-signing to fix cdhash drift across rebuilds. That solved one layer of the TCC problem but uncovered the next: **modern macOS (Sequoia and later) silently denies TCC permission prompts for CLI binaries that lack an embedded `Info.plist` with `NSXxxUsageDescription` strings.** No dialog appears; no error in System Settings; just silent denial. The 5 keystroke-routing tools (`execute_command`, `execute_with_auto_retrieve`, `execute_with_streaming`, `run_template`, `send_to_session`) hit this. Hours of TCC-cleanup and re-grant cycles did not resolve it — the permission prompts the user needed to grant **were never being shown** because the binary had no Info.plist to drive them.
+
+Empirical confirmation from the live TCC log: `auth_value=1` (Unknown) on every request from `claude-command-runner` to `kTCCServiceListenEvent`, no `Prompting` entry ever appearing — the textbook silent-deny pattern for CLI binaries.
+
+### Fixed
+
+- **`scripts/make-app-bundle.sh`** (new) wraps the built CLI binary in a proper `.app` bundle at `.build/release/claude-command-runner.app/`. The bundle structure is minimal — `Contents/MacOS/claude-command-runner` + `Contents/Info.plist`, no Resources, no icon. The `Info.plist` declares:
+    - `CFBundleIdentifier=com.m-pineapple.claude-command-runner` (stable, reverse-DNS, so TCC can target the bundle by identity rather than by cdhash)
+    - `LSUIElement=true` (don't show in Dock when launched — we're a CLI, not a UI app)
+    - `NSAppleEventsUsageDescription`, `NSInputMonitoringUsageDescription`, `NSAccessibilityUsageDescription` — these are what macOS shows in the permission prompt; missing them = silent denial
+- **`build.sh`** now invokes `scripts/make-app-bundle.sh` after the binary is built (and code-signed if `CCR_CODESIGN_IDENTITY` is set). The bundle is signed as a unit when the env var is present.
+- **`config/claude-desktop-config.json`** and **`config/warp-agent-mcp.json`** updated to point at the binary inside the bundle: `.build/release/claude-command-runner.app/Contents/MacOS/claude-command-runner`. README + `docs/WARP_AGENT.md` follow.
+- **MCP `serverInfo.version` 6.0.2 → 6.0.3**.
+
+### Changed (potentially breaking — see Migration)
+
+- **Recommended install path moved** from `.build/release/claude-command-runner` to `.build/release/claude-command-runner.app/Contents/MacOS/claude-command-runner`. The bare-binary path still exists (we keep a copy for backwards compat) and still works for the 34 tools that don't use keystroke routing. The 5 keystroke-routing tools require the bundle path.
+
+### Migration (existing v6.0.x users)
+
+Edit your config files and **append `.app/Contents/MacOS/claude-command-runner`** to the existing path:
+
+```diff
+-  "command": ".../claude-command-runner/.build/release/claude-command-runner",
++  "command": ".../claude-command-runner/.build/release/claude-command-runner.app/Contents/MacOS/claude-command-runner",
+```
+
+Restart Claude Desktop / Warp. On the next `execute_command`, macOS should **finally prompt** for AppleEvents / Input Monitoring permission — grant once and it sticks (combined with v6.0.2's stable signing, the grant survives future rebuilds).
+
+If you'd previously added the bare `claude-command-runner` binary to System Settings → Privacy & Security → Input Monitoring / Automation, those entries become orphans (different identity from the bundle). Safe to remove for hygiene; not required for functionality.
+
+### Notes
+
+- Tool count unchanged: 39.
+- No source code changes beyond the version-string bump.
+- `scripts/make-app-bundle.sh` is idempotent — re-runs overwrite the bundle cleanly.
+
 ## [6.0.2] - 2026-05-16 — stable code signing opt-in
 
 ### Why this release exists

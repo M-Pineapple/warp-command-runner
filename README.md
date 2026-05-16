@@ -180,14 +180,14 @@ cd claude-command-runner
 ./build.sh
 ```
 
-2. **Pick your consumer(s)** — you can install for one or both:
+2. **Pick your consumer(s)** — you can install for one or both. **v6.0.3 ships a `.app` bundle wrapper** — point at the binary INSIDE the bundle (the wrapper carries the Info.plist that macOS Sequoia+ needs to prompt for TCC permissions; without it, the 5 keystroke-routing tools silently fail):
 
    **A — Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
    ```json
    {
      "mcpServers": {
        "claude-command-runner": {
-         "command": "/path/to/claude-command-runner/.build/release/claude-command-runner",
+         "command": "/path/to/claude-command-runner/.build/release/claude-command-runner.app/Contents/MacOS/claude-command-runner",
          "args": []
        }
      }
@@ -199,13 +199,15 @@ cd claude-command-runner
    {
      "mcpServers": {
        "claude-command-runner": {
-         "command": "/path/to/claude-command-runner/.build/release/claude-command-runner",
+         "command": "/path/to/claude-command-runner/.build/release/claude-command-runner.app/Contents/MacOS/claude-command-runner",
          "args": []
        }
      }
    }
    ```
    See [`docs/WARP_AGENT.md`](docs/WARP_AGENT.md) for the full guide.
+
+   > **Upgrading from v6.0.0–6.0.2?** Edit your existing config file and append `.app/Contents/MacOS/claude-command-runner` to the path. The legacy bare-binary path still works for the 34 non-keystroke tools, but `execute_command` / `execute_with_auto_retrieve` / `execute_with_streaming` / `run_template` / `send_to_session` will silently fail without the bundle path.
 
 3. **Grant Accessibility permission** (only required for `send_to_session` keystroke injection in v6.0; tab/window opening uses deeplinks and does not require it):
    - Open **System Settings → Privacy & Security → Accessibility**

@@ -39,19 +39,24 @@ swift build -c release
 #
 # See README "Stable code signing" for cert generation steps.
 if [[ -n "${CCR_CODESIGN_IDENTITY:-}" ]]; then
-    echo "Code-signing with identity: $CCR_CODESIGN_IDENTITY"
+    echo "Code-signing bare binary with identity: $CCR_CODESIGN_IDENTITY"
     codesign --force --sign "$CCR_CODESIGN_IDENTITY" \
         --identifier claude-command-runner \
-        --options runtime \
         .build/release/claude-command-runner
     NEW_HASH=$(codesign -d --verbose=4 .build/release/claude-command-runner 2>&1 | grep CandidateCDHash | head -1)
-    echo "Code-signing complete. $NEW_HASH"
+    echo "Bare-binary code-signing complete. $NEW_HASH"
 else
-    echo "(Skipping stable code-signing — CCR_CODESIGN_IDENTITY not set.)"
-    echo "  TCC permissions for keystroke-routing tools (execute_command etc.)"
-    echo "  will break on every rebuild without it. See README 'Stable code"
-    echo "  signing' to set up a one-time self-signed cert."
+    echo "(Skipping stable bare-binary code-signing — CCR_CODESIGN_IDENTITY not set.)"
 fi
+
+# v6.0.3: wrap the CLI binary in a proper .app bundle with embedded
+# Info.plist containing NSXxxUsageDescription strings. Without this,
+# modern macOS silently denies TCC permission requests from CLI binaries
+# (no prompt ever appears). The bundle gives TCC a proper entity to
+# prompt for. See scripts/make-app-bundle.sh for the why and the Info.plist.
+echo ""
+echo "Creating .app bundle wrapper..."
+./scripts/make-app-bundle.sh
 
 # Create a convenient symlink
 echo "Creating symlink..."
@@ -60,15 +65,21 @@ ln -sf .build/release/claude-command-runner claude-command-runner
 echo ""
 echo "Build complete!"
 echo ""
-echo "Executable location:"
+echo "============================================================"
+echo "v6.0.3 install path (RECOMMENDED — needed for keystroke tools):"
+echo ""
+echo "  $(pwd)/.build/release/claude-command-runner.app/Contents/MacOS/claude-command-runner"
+echo ""
+echo "Use this path in BOTH:"
+echo "  - Claude Desktop:  ~/Library/Application Support/Claude/claude_desktop_config.json"
+echo "  - Warp Agent:      ~/.warp/.mcp.json"
+echo ""
+echo "See config/claude-desktop-config.json and config/warp-agent-mcp.json for templates."
+echo "============================================================"
+echo ""
+echo "Legacy bare-binary path (still works, but the 5 keystroke-routing tools"
+echo "will silently fail on macOS Sequoia+ due to missing Info.plist):"
 echo "  $(pwd)/.build/release/claude-command-runner"
-echo ""
-echo "To install with Claude Desktop:"
-echo "  Edit ~/Library/Application Support/Claude/claude_desktop_config.json"
-echo "  See README Quick Install for the JSON snippet."
-echo ""
-echo "To install with Warp's native agent panel:"
-echo "  Edit ~/.warp/.mcp.json (see docs/WARP_AGENT.md)."
 echo ""
 echo "To test locally:"
 echo "  ./claude-command-runner --verbose"

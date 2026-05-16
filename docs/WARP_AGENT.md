@@ -51,12 +51,14 @@ Two equivalent paths:
 {
   "mcpServers": {
     "claude-command-runner": {
-      "command": "/Users/you/path/to/claude-command-runner/.build/release/claude-command-runner",
+      "command": "/Users/you/path/to/claude-command-runner/.build/release/claude-command-runner.app/Contents/MacOS/claude-command-runner",
       "args": []
     }
   }
 }
 ```
+
+> **v6.0.3+** ships a `.app` bundle wrapper around the CLI binary. Point at the binary INSIDE the bundle (the path above). The bundle's `Info.plist` declares the `NSAppleEventsUsageDescription` / `NSInputMonitoringUsageDescription` strings macOS Sequoia needs to actually prompt for TCC permissions on the keystroke-routing tools — without it, those tools silently fail.
 
 A template lives at `config/warp-agent-mcp.json` in this repo — copy, edit the path, drop into `~/.warp/.mcp.json`. If you already have an `mcpServers` entry, merge the keys.
 
