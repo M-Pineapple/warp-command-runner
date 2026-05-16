@@ -223,6 +223,39 @@ cd claude-command-runner
    ```
    See `helper/shell-shim.zsh` / `helper/shell-shim.bash` for the implementation. Uninstall with `helper/uninstall-shim.sh`.
 
+### Stable code signing (recommended for the 5 keystroke-routing tools)
+
+**Without stable signing**, every `swift build` produces an ad-hoc binary with a new cdhash. macOS treats each rebuild as a new program, orphaning any TCC permission grants from previous builds. Symptom: `osascript is not allowed to send keystrokes (1002)` silently reappears after every `git pull && ./build.sh`, even though System Settings → Privacy & Security toggles still look correct. This affects the 5 AppleScript-routed tools: `execute_command`, `execute_with_auto_retrieve`, `execute_with_streaming`, `run_template`, `send_to_session`. The other 34 tools are unaffected.
+
+**Fix:** sign the binary with a stable certificate so the cdhash stays constant across rebuilds. Grant TCC once, it persists.
+
+**One-time setup (~2 minutes):**
+
+1. Open **Keychain Access** → menu **Keychain Access → Certificate Assistant → Create a Certificate…**
+2. Name: `claude-command-runner` (or anything memorable)
+3. Identity Type: **Self Signed Root**
+4. Certificate Type: **Code Signing**
+5. Click **Create** → **Continue** through any warnings → **Done**
+
+**Per-build:** export the cert name before invoking `./build.sh`:
+
+```bash
+export CCR_CODESIGN_IDENTITY="claude-command-runner"
+./build.sh
+```
+
+Add the export to your shell rc to make it persistent. The build script detects the env var and runs `codesign --force --sign "$CCR_CODESIGN_IDENTITY" --identifier claude-command-runner --options runtime` on the binary after compilation. The cdhash is now stable; TCC grants survive future rebuilds indefinitely.
+
+**Verification after build:**
+```bash
+codesign --display --verbose=4 .build/release/claude-command-runner | grep -E 'Signature|CDHash'
+```
+Should show `Signature size=...` (not `adhoc`) and a consistent `CandidateCDHash` value across rebuilds.
+
+**For wider distribution:** if you have a paid Apple Developer account, use a **Developer ID Application** certificate instead — same flow, different cert. Then other users can install pre-built binaries from your GitHub Releases and macOS won't refuse them.
+
+**If you skip this:** `execute_pipeline` is a fully-working alternative for everything `execute_command` does. No TCC permissions required. See the "Why this is so painful" section under Troubleshooting for the full story.
+
 ## Usage
 
 ### Available Tools (39)

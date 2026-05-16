@@ -5,6 +5,48 @@ All notable changes to Claude Command Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.2] - 2026-05-16 — stable code signing opt-in
+
+### Why this release exists
+
+Live diagnosis on a user's machine revealed that the persistent "osascript is not allowed to send keystrokes (1002)" issue affecting the 5 AppleScript-routed tools is **not** a configuration problem — it's a structural one. Empirical evidence captured via `log show --predicate 'process == "tccd"'`:
+
+1. The TCC service being denied is `kTCCServiceAppleEvents`, NOT `kTCCServiceAccessibility`. The error message's "keystrokes" wording is misleading; the actual gate failing is the AppleEvents/Automation permission.
+2. The binary is **ad-hoc signed** (Swift's default for `swift build`). Every rebuild produces a new `cdhash`. macOS treats each rebuild as a separate program for TCC purposes, orphaning the previous grant.
+3. The user's `System Settings → Privacy & Security → Automation` panel had **three separate `claude-command-runner` entries** — one per rebuild cycle — visually confirming the drift.
+4. Claude Desktop spawns the MCP server via Apple's `responsibility_spawnattrs_setdisclaim` helper (`/Applications/Claude.app/Contents/Helpers/disclaimer`), which deliberately prevents Claude.app's TCC grants from propagating to the child. So granting Claude.app permissions doesn't help; the child binary's own identity is what TCC checks.
+
+**Every user who ever rebuilds this project hits this.** The first install works (TCC prompts, user grants). The first `git pull && ./build.sh` silently breaks it. Until v6.0.2, the only "fix" was to re-grant after every rebuild — tedious and confusing.
+
+### Fixed
+
+- **build.sh now supports stable code signing via `CCR_CODESIGN_IDENTITY` env var.** When set, the binary is signed with the user's chosen certificate (typically a self-signed cert from Keychain Access). Resulting cdhash is **stable across rebuilds**. Grant TCC once, it persists indefinitely. Opt-in to preserve backwards compatibility — unset means ad-hoc behavior unchanged from v6.0.x.
+- **build.sh: dropped stale `--port 9876` invocation hint** from the post-build install instructions (the TCP listener was deleted in Tier A of v6.0.0).
+- **build.sh: updated install hint** to point at both Claude Desktop and Warp Agent config paths (was Warp-only and outdated).
+- **MCP `serverInfo.version` 6.0.1 → 6.0.2**.
+
+### Documentation
+
+- **README "Stable code signing" section** added under Installation (after the optional shell shim step). Explains the cdhash-drift problem in 3 sentences, the 5-step Keychain Access cert-generation flow, the `CCR_CODESIGN_IDENTITY` env var, verification command, and the `execute_pipeline` fallback for users who'd rather not sign.
+- **CHANGELOG v6.0.2 entry** (this one) captures the empirical TCC log evidence so future readers don't have to re-do the investigation.
+
+### Migration
+
+For existing users hitting the TCC stuckness:
+
+1. Generate a self-signed code-signing cert in Keychain Access (5 steps, see README)
+2. `export CCR_CODESIGN_IDENTITY="claude-command-runner"` (or whatever you named the cert)
+3. `./build.sh`
+4. Remove all stale `claude-command-runner` entries from `System Settings → Privacy & Security → Automation`
+5. Restart Claude Desktop
+6. Trigger an `execute_command` → TCC prompts fresh → grant → done. Permanent until you replace the cert.
+
+### Notes
+
+- No behavior change for users who don't set `CCR_CODESIGN_IDENTITY` — backwards-compatible.
+- Tool count unchanged: 39.
+- No API changes.
+
 ## [6.0.1] - 2026-05-07 — patch follow-up to v6.0.0
 
 Three real findings surfaced from the v6.0.0 live verification, plus one already-staged fix that was waiting for a tag.
