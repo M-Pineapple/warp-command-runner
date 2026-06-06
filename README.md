@@ -4,7 +4,11 @@
   <img src="https://github.com/user-attachments/assets/13d56902-b9d7-4368-b44f-2cefa15bf746">
 </div>
 
-A powerful Model Context Protocol (MCP) server that bridges Claude Desktop **and Warp's native agent panel** with terminal applications. v6.0 adds dual-consumer support: the same binary serves both Claude Desktop and Warp's built-in agent. 39 integrated tools.
+**Lets Claude actually use your terminal.** You ask, Claude types the command into your [Warp](https://app.warp.dev/referral/G9W3EY) tab, captures the output, and tells you what happened. Works from Claude Desktop or right inside Warp's built-in AI agent panel. An MCP server with 39 tools — command execution, project setups, file watching, SSH, clipboard, environment intelligence. macOS, Swift, open source.
+
+> Built for [Warp Terminal](https://app.warp.dev/referral/G9W3EY) (free, open source AGPL-3.0). The 5 most powerful tools route commands visibly into your active Warp tab — that's the magic of this MCP. If you don't use Warp yet, [grab it here](https://app.warp.dev/referral/G9W3EY) — it pairs with this MCP for what's probably the closest thing to "Claude with a real terminal" you can get right now.
+
+The original tagline, for the technical readers: a Model Context Protocol (MCP) server that bridges Claude Desktop **and Warp's native agent panel** with terminal applications. Dual-consumer support: the same binary serves both Claude Desktop and Warp's built-in agent.
 
 ## 🚀 What's New in v6.0.0 — Warp re-pivot
 
