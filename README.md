@@ -1,7 +1,7 @@
 # Claude Command Runner
 
 <div align="center">
-  <img src="https://github.com/user-attachments/assets/13d56902-b9d7-4368-b44f-2cefa15bf746">
+  <img src="assets/icon.svg" width="256" alt="Claude Command Runner — terminal prompt, Warp glyph, Claude asterisk">
 </div>
 
 **Lets Claude actually use your terminal.** You ask, Claude types the command into your [Warp](https://app.warp.dev/referral/G9W3EY) tab, captures the output, and tells you what happened. It's a Model Context Protocol (MCP) server with 39 tools — command execution, project setups, file watching, SSH, clipboard, environment intelligence — and the same binary works from both Claude Desktop and Warp's built-in AI agent panel. macOS, Swift, open source.
