@@ -38,6 +38,27 @@ swift build -c release
 # across rebuilds and TCC grants persist.
 #
 # See README "Stable code signing" for cert generation steps.
+# If CCR_CODESIGN_IDENTITY isn't set, try to auto-detect a single signing
+# identity from the keychain. This prevents the common "forgot to export the
+# identity -> ad-hoc build -> TCC grants revoked -> error 1002" trap. Only
+# auto-selects when exactly ONE Apple Development / Developer ID identity exists;
+# with zero or several it stays unset (set CCR_CODESIGN_IDENTITY yourself).
+# Exported so scripts/make-app-bundle.sh inherits it and signs the bundle too.
+if [[ -z "${CCR_CODESIGN_IDENTITY:-}" ]]; then
+    AUTO_IDENTITIES=$(security find-identity -v -p codesigning 2>/dev/null \
+        | grep -E "Apple Development|Developer ID Application" || true)
+    AUTO_COUNT=$(printf '%s' "$AUTO_IDENTITIES" | grep -c . || true)
+    if [[ "$AUTO_COUNT" -eq 1 ]]; then
+        CCR_CODESIGN_IDENTITY=$(printf '%s\n' "$AUTO_IDENTITIES" | awk '{print $2}')
+        export CCR_CODESIGN_IDENTITY
+        echo "Auto-detected code-signing identity: $CCR_CODESIGN_IDENTITY"
+        echo "(Export CCR_CODESIGN_IDENTITY yourself to override.)"
+    elif [[ "$AUTO_COUNT" -gt 1 ]]; then
+        echo "⚠️  Multiple signing identities found — not auto-selecting one."
+        echo "   Set CCR_CODESIGN_IDENTITY explicitly (run: security find-identity -v -p codesigning)."
+    fi
+fi
+
 if [[ -n "${CCR_CODESIGN_IDENTITY:-}" ]]; then
     echo "Code-signing bare binary with identity: $CCR_CODESIGN_IDENTITY"
     codesign --force --sign "$CCR_CODESIGN_IDENTITY" \
@@ -46,7 +67,9 @@ if [[ -n "${CCR_CODESIGN_IDENTITY:-}" ]]; then
     NEW_HASH=$(codesign -d --verbose=4 .build/release/claude-command-runner 2>&1 | grep CandidateCDHash | head -1)
     echo "Bare-binary code-signing complete. $NEW_HASH"
 else
-    echo "(Skipping stable bare-binary code-signing — CCR_CODESIGN_IDENTITY not set.)"
+    echo "⚠️  No signing identity (none auto-detected, CCR_CODESIGN_IDENTITY unset)."
+    echo "   Building AD-HOC — the 5 keystroke-routing tools won't receive TCC grants."
+    echo "   See README → 'Upgrading from a previous version' / the Sequoia recipe."
 fi
 
 # v6.0.3: wrap the CLI binary in a proper .app bundle with embedded

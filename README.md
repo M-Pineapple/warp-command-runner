@@ -179,8 +179,16 @@ Output capture (`/tmp/<id>.json` polling) and the 24 tools that don't touch the 
 ```bash
 git clone https://github.com/M-Pineapple/claude-command-runner.git
 cd claude-command-runner
+
+# For the 5 keystroke-routing tools (execute_command, etc.) to work, the build
+# must be SIGNED with your code-signing identity. build.sh auto-detects a single
+# Apple Development / Developer ID identity; to be explicit (or if you have
+# several), export it first — find yours with:
+#   security find-identity -v -p codesigning
+export CCR_CODESIGN_IDENTITY="<your-cert-sha1>"   # optional if auto-detect finds one; persist in ~/.zshrc
 ./build.sh
 ```
+> Only need the 34 non-keystroke tools (incl. `execute_pipeline`)? An unsigned build is fine — skip the `export`.
 
 2. **Pick your consumer(s)** — you can install for one or both. **v6.0.3 ships a `.app` bundle wrapper** — point at the binary INSIDE the bundle (the wrapper carries the Info.plist that macOS Sequoia+ needs to prompt for TCC permissions; without it, the 5 keystroke-routing tools silently fail):
 
@@ -226,6 +234,31 @@ cd claude-command-runner
    helper/install-shim.sh
    ```
    See `helper/shell-shim.zsh` / `helper/shell-shim.bash` for the implementation. Uninstall with `helper/uninstall-shim.sh`.
+
+### Upgrading from a previous version
+
+If you already have a signed install working (TCC permissions granted), upgrading is:
+
+```bash
+cd claude-command-runner
+git pull
+
+# Rebuild with the SAME signing identity you used originally. Without it, build.sh
+# falls back to an ad-hoc-signed bundle, macOS sees a new identity, and your
+# keystroke (TCC) grants stop applying → error 1002 on execute_command.
+# (build.sh auto-detects a single identity; export to be explicit.)
+export CCR_CODESIGN_IDENTITY="<your-cert-sha1>"   # persist in ~/.zshrc so you don't forget
+./build.sh
+
+# Confirm it signed with your cert (NOT adhoc) BEFORE replacing your good bundle:
+codesign -dvv .build/release/claude-command-runner.app 2>&1 | grep -E "Authority=Apple|Signature=adhoc"
+
+# Replace the deployed bundle (rm first — cp -R onto an existing .app nests it):
+rm -rf "/Applications/Claude Command Runner.app"
+cp -R .build/release/claude-command-runner.app "/Applications/Claude Command Runner.app"
+```
+
+Then restart Claude Desktop. Because the bundle keeps the same identifier and is signed with the same certificate, your existing TCC grants (Automation, Input Monitoring, Accessibility, Full Disk Access) carry over — **no re-granting needed**. If the keystroke tools start failing with error 1002 after an upgrade, you almost certainly rebuilt unsigned; re-sign with your cert and redeploy.
 
 ### 🛡️ macOS Sequoia full setup recipe (the 7 ordered steps)
 
