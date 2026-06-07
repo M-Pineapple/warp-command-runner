@@ -118,7 +118,7 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
         // Create the MCP server
         let server = Server(
             name: "Claude Command Runner",
-            version: "6.0.4",
+            version: "6.0.5",
             capabilities: .init(
                 tools: .init(listChanged: false)
             )
@@ -1018,22 +1018,36 @@ func handleGetCommandOutput(params: CallTool.Parameters, logger: Logger) async -
     
     // First try to get from memory
     var result = await commandResultsStore.retrieve(commandId)
-    
-    // If not in memory and not "last", try to read from disk
-    if result == nil && commandId != "last" {
-        logger.info("Not found in memory, checking disk...")
-        let outputFile = "/tmp/claude_output_\(commandId).json"
-        
-        if FileManager.default.fileExists(atPath: outputFile) {
+
+    // If not in memory, fall back to disk. For the documented "last" alias,
+    // resolve to the most recently modified output file (the in-memory store
+    // may not hold it if the result was never explicitly stored).
+    if result == nil {
+        var outputFile: String? = nil
+        if commandId == "last" {
+            let tempDir = "/tmp"
+            outputFile = (try? FileManager.default.contentsOfDirectory(atPath: tempDir))?
+                .filter { $0.hasPrefix("claude_output_") && $0.hasSuffix(".json") }
+                .compactMap { name -> (path: String, mtime: Date)? in
+                    let path = "\(tempDir)/\(name)"
+                    guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+                          let mtime = attrs[.modificationDate] as? Date else { return nil }
+                    return (path, mtime)
+                }
+                .max(by: { $0.mtime < $1.mtime })?
+                .path
+        } else {
+            let candidate = "/tmp/claude_output_\(commandId).json"
+            if FileManager.default.fileExists(atPath: candidate) { outputFile = candidate }
+        }
+
+        if let outputFile = outputFile {
+            logger.info("Reading command output from disk: \(outputFile)")
             do {
                 let data = try Data(contentsOf: URL(fileURLWithPath: outputFile))
                 let decoder = JSONDecoder()
                 decoder.dateDecodingStrategy = .iso8601
-                
                 result = try decoder.decode(CommandExecutionResult.self, from: data)
-                logger.info("Found and decoded output from disk")
-                
-                // Store it for future use
                 if let result = result {
                     await commandResultsStore.store(result)
                 }
@@ -1044,6 +1058,15 @@ func handleGetCommandOutput(params: CallTool.Parameters, logger: Logger) async -
     }
     
     if let result = result {
+        // Persist the completed result to the history DB (exit code + duration).
+        // No-op if the id isn't a tracked command (e.g. a "last"-resolved file).
+        _ = DatabaseManager.shared.updateCommand(
+            result.commandId,
+            stdout: result.output,
+            stderr: result.error,
+            exitCode: Int(result.exitCode),
+            completedAt: result.timestamp
+        )
         var output = """
         📊 Command Output Retrieved:
         ========================

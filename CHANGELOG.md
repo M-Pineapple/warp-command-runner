@@ -5,6 +5,18 @@ All notable changes to Claude Command Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.5] - 2026-06-07
+
+### Fixed
+
+- `open_terminal_tab` (Warp): status now reflects that the new tab is requested via the `warp://` deeplink and can't be confirmed from outside Warp (Warp exposes no API to verify the tab or return a session UUID); the returned id is labeled a local tracking id.
+- `get_command_output`: the documented `last` alias now resolves to the most recent output instead of returning "not found".
+- `add_file_watch`: the `pattern` filter is now applied (the handler read a different parameter name, so patterns were ignored).
+- Command history: completed commands now record exit code and duration when their output is retrieved, instead of staying pending.
+- `self_check`: Warp running-state detection now matches the app path (Warp's executable is named `stable`), fixing a false "not running".
+- Internal: resolved a latent re-entrant `DispatchQueue` deadlock in `DatabaseManager.updateCommand`.
+- MCP `serverInfo.version` 6.0.4 → 6.0.5.
+
 ## [6.0.4] - 2026-05-16 — full macOS Sequoia TCC setup recipe documented
 
 ### Why this release exists

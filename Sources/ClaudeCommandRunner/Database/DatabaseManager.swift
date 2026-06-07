@@ -302,9 +302,13 @@ public class DatabaseManager {
     }
     
     public func updateCommand(_ commandId: String, stdout: String?, stderr: String?, exitCode: Int?, completedAt: Date) -> Bool {
+        // Resolve the start time OUTSIDE the barrier: getCommandStartTime runs its
+        // own queue.sync, and nesting that inside a barrier block on the same queue
+        // deadlocks. (Latent since this method had no callers until v6.0.5.)
+        let startTime = getCommandStartTime(commandId)
         return queue.sync(flags: .barrier) {
-            let duration = getCommandStartTime(commandId).map { Int(completedAt.timeIntervalSince($0) * 1000) }
-            
+            let duration = startTime.map { Int(completedAt.timeIntervalSince($0) * 1000) }
+
             let sql = """
                 UPDATE commands 
                 SET stdout = ?, stderr = ?, exit_code = ?, completed_at = ?, duration_ms = ?

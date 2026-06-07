@@ -56,7 +56,7 @@ Claude Command Runner is a **dual-consumer MCP server** — the same binary serv
 - Probe environment context (git, venv, Docker, Node)
 - Parse command output into structured JSON
 - Manage workspace profiles per project (with optional emission as Warp launch configs)
-- Orchestrate multiple terminal tabs (open via `warp://` deeplinks; AppleScript fallback for non-Warp terminals)
+- Open terminal tabs (via `warp://` deeplinks; AppleScript fallback for non-Warp terminals) and send commands to the active tab
 - Watch files and trigger commands on changes
 - Execute commands on remote hosts via SSH
 - **(v6.0)** Surface tool-execution status to Warp's UI as OSC 777 `warp://cli-agent` events
@@ -415,7 +415,7 @@ Pure subprocess, no AppleScript, no TCC layer, captures output cleanly, works on
 
 | Tool | Description | Use Case |
 |------|-------------|----------|
-| `open_terminal_tab` | Open a new named terminal tab (Warp: via `warp://action/new_tab` deeplink in v6.0) | Parallel workflows |
+| `open_terminal_tab` | Open a new named terminal tab (Warp: via `warp://action/new_tab` deeplink in v6.0) | Long-running processes |
 | `send_to_session` | Send command to a specific tab (AppleScript keystroke; tab-targeting limited on Warp) | Targeted execution |
 | `list_sessions` | View active terminal sessions | Session overview |
 | `close_session` | Close a named session | Cleanup |

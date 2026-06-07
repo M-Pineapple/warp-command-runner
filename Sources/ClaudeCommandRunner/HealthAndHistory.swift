@@ -245,30 +245,22 @@ private func checkDatabaseHealth() -> (status: String, detail: String) {
 private func checkTerminalAvailability() async -> (status: String, detail: String) {
     let preferredTerminal = TerminalConfig.getPreferredTerminal()
     
-    // Check if Warp is running
-    let script = """
-    tell application "System Events"
-        set appRunning to (name of processes) contains "Warp"
-    end tell
-    return appRunning
-    """
-    
+    // Match the running process by app path rather than process name. Warp's
+    // executable is named "stable" (not "Warp"), so a name match always fails;
+    // pgrep -f matches the full command line, which contains "<Name>.app".
     let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-    process.arguments = ["-e", script]
-    
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+    process.arguments = ["-f", "\(preferredTerminal.rawValue).app"]
+
     let pipe = Pipe()
     process.standardOutput = pipe
     process.standardError = pipe
-    
+
     do {
         try process.run()
         process.waitUntilExit()
-        
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        
-        if output == "true" {
+
+        if process.terminationStatus == 0 {
             return ("✅", "\(preferredTerminal.rawValue) detected and running")
         } else {
             return ("⚠️", "\(preferredTerminal.rawValue) not running (commands may fail)")

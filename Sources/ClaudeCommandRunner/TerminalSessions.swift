@@ -362,18 +362,34 @@ func handleOpenTerminalTab(params: CallTool.Parameters, logger: Logger) async ->
     // Register session
     let session = await sessionManager.register(name: name, terminal: terminal)
 
-    var output = """
-    ✅ New terminal tab opened: "\(name)"
-    • Terminal: \(terminal.rawValue)
-    • Tab index: \(session.tabIndex)
-    • Session UUID: \(session.uuid)
-    """
+    var output: String
+    if terminal == .warp || terminal == .warpPreview {
+        // Honest reporting: `open warp://…` only confirms the URL was handed to
+        // Warp, not that a tab was actually created — and Warp returns no
+        // session UUID, so the tracking ID below is a local label only.
+        output = """
+        📨 New-tab request dispatched to \(terminal.rawValue) via warp:// deeplink: "\(name)"
+        • Local tracking ID: \(session.uuid) (internal label, not Warp's session UUID)
+
+        Note: Warp exposes no API to confirm a tab was created or to return its
+        real session UUID, so this can't be verified from outside Warp. Commands
+        you send next land in the currently-focused tab — Warp has no interface
+        to target a specific tab.
+        """
+    } else {
+        output = """
+        ✅ New terminal tab opened: "\(name)"
+        • Terminal: \(terminal.rawValue)
+        • Tab index: \(session.tabIndex)
+        • Session UUID: \(session.uuid)
+        """
+    }
 
     if let dir = directory {
         output += "\n• Directory: \(dir)"
     }
 
-    output += "\n\n💡 Use 'send_to_session' with name \"\(name)\" to send commands to this tab."
+    output += "\n\n💡 Use 'send_to_session' with name \"\(name)\" to send commands."
 
     return CallTool.Result(
         content: [.text(output)],

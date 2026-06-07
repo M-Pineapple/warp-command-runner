@@ -308,6 +308,24 @@ enum FileWatcherError: Swift.Error, LocalizedError {
 
 // MARK: - MCP Tool Handlers
 
+/// Derive bare file extensions from a glob pattern.
+/// "*.swift" -> ["swift"]; "*.{ts,tsx}" -> ["ts","tsx"]; "*"/"" -> nil (match all files).
+private func extensionsFromGlob(_ glob: String) -> [String]? {
+    var p = glob.trimmingCharacters(in: .whitespaces)
+    guard !p.isEmpty, p != "*", p != "*.*" else { return nil }
+    if let dotIdx = p.lastIndex(of: ".") {
+        p = String(p[p.index(after: dotIdx)...])
+    }
+    p = p.replacingOccurrences(of: "{", with: "").replacingOccurrences(of: "}", with: "")
+    let parts = p.split(separator: ",").map {
+        $0.trimmingCharacters(in: .whitespaces)
+          .replacingOccurrences(of: "*", with: "")
+          .lowercased()
+    }
+    let cleaned = parts.filter { !$0.isEmpty }
+    return cleaned.isEmpty ? nil : cleaned
+}
+
 /// Add a file watcher rule
 func handleAddFileWatch(params: CallTool.Parameters, logger: Logger) async -> CallTool.Result {
     guard let arguments = params.arguments,
@@ -321,9 +339,17 @@ func handleAddFileWatch(params: CallTool.Parameters, logger: Logger) async -> Ca
         )
     }
 
-    // Optional parameters
+    // Optional parameters.
+    // The tool schema exposes `pattern` (a glob like "*.swift"); derive the bare
+    // extensions the matcher expects from it. Also accept a `file_extensions`
+    // array for back-compat.
     var extensions: [String]? = nil
-    if let extValue = arguments["file_extensions"],
+    if let patternValue = arguments["pattern"],
+       case .string(let glob) = patternValue, !glob.isEmpty {
+        extensions = extensionsFromGlob(glob)
+    }
+    if extensions == nil,
+       let extValue = arguments["file_extensions"],
        case .array(let extArray) = extValue {
         extensions = extArray.compactMap { if case .string(let s) = $0 { return s } else { return nil } }
     }
