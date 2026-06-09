@@ -36,7 +36,7 @@ let commandResultsStore = CommandResultsStore()
 struct ClaudeCommandRunner: AsyncParsableCommand {
     /// Single source of truth for the version — previously "6.1.0", "v2.0"
     /// and "Version 2.0" coexisted across the server init, logs and help text.
-    static let version = "6.1.0"
+    static let version = "6.2.0"
 
     static let configuration = CommandConfiguration(
         commandName: "claude-command-runner",

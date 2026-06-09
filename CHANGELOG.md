@@ -5,6 +5,41 @@ All notable changes to Claude Command Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.2.0] - 2026-06-09 — full code audit: reliability, security ordering, real test suite
+
+### Why this release exists
+
+A full audit of the codebase (~9,500 lines) found two classes of live bug — stdout writes corrupting the MCP protocol stream, and a pipe-handling pattern that could deadlock every spawn site — plus a security guard that only existed in dead code. This release fixes all of it, removes ~900 lines of verified dead code, and replaces the placeholder test with a 30-test suite.
+
+### Fixed
+
+- **Protocol corruption**: `DatabaseManager` wrote ~25 `print()` messages to stdout, which is the JSON-RPC channel under stdio transport. One fired on every `execute_command`. All logging now goes to stderr.
+- **Pipe deadlocks**: every process spawn site waited for exit before reading pipes, so any child writing more than the ~64 KB pipe buffer deadlocked permanently (build logs, `git log`, remote output). A new shared `runProcess()` drains pipes concurrently — proven by a 1 MB-per-stream test.
+- **Unbounded hangs**: no execution path had a timeout. Now: pipeline steps and SSH execution 600s, file-watch commands 300s, AppleScript dispatch 30s, with SIGTERM → SIGKILL escalation. Blocking waits also moved off the Swift cooperative pool, so concurrent slow calls can no longer starve the server.
+- **Interactive-command guard now actually runs**: the editor/REPL/pager detection only existed in an unreachable copy of the execute handler, so `vim`, bare `ssh`, `top` etc. would hang the capture script. The guard is now in the live path (and `check_interactive` patterns that span a pipe, like `curl … | sh`, can now match — they previously never could).
+- **Security ordering**: the blocked-command check ran *after* the command was saved to history and analytics, so blocked commands were recorded as executed. Checks now run first, and cover the full command including the `cd` prefix.
+- **`working_directory` quoting**: user-supplied paths were interpolated into `cd "…"` unescaped, so a crafted path could break out of the quotes (bypassing the blocklist). Now escaped everywhere, with an injection test pinning the behaviour.
+- **Database hardening**: a failed open left a NULL SQLite handle that later calls passed to `sqlite3_prepare_v2` (undefined behaviour, likely crash); the single connection was used from a concurrent queue (a data race unless the system SQLite is in serialized mode). Now: serial queue + `SQLITE_OPEN_FULLMUTEX`, nil-handle guards on every operation, `PRAGMA user_version` schema versioning.
+- **Unbounded database growth**: `cleanupOldCommands` and `vacuum` existed but had no callers, and analytics had no cleanup at all. Retention now runs at startup per `history.retentionDays` (default 90), including new analytics pruning. The health check also counts via `COUNT(*)` instead of materialising 9,999 full records.
+- **FileWatcher**: cancelling a paused watch crashed libdispatch (cancel of a suspended source); double pause/resume unbalanced the suspend count; watch commands blocked the actor (one hung command froze all watch tools). All fixed.
+- **Schema/handler mismatches**: `open_terminal_tab` now honours the documented `working_directory` (it read `directory` only) and declares its `terminal` parameter; `cleanup_sessions inactive_minutes`, ssh `port`/`timeout`, `update_interval` and `max_duration` accept JSON numbers as their schemas declare (previously string-only, numbers silently ignored).
+- SSH profile persistence failures are now logged instead of silently swallowed.
+- `make-app-bundle.sh` no longer dies silently if the version grep fails.
+
+### Changed
+
+- AppleScript escaping centralised in one helper (three files had hand-rolled copies; one path escaped nothing).
+- Version string consolidated to a single constant (the binary previously reported "6.1.0", "v2.0" and "Version 2.0" in different places); `--version` now works.
+- ~900 lines of verified dead code removed: the unreachable `handleExecuteCommandV2`, `AutoRetrieve.swift` (superseded by the enhanced version), `PendingCommands.swift` (tool was never registered), `CommandHistory.swift` (never instantiated), `waitForCommandOutput`, duplicate `SSHProfileStore.loadFromDisk`, and `build.sh.bak`.
+
+### Removed
+
+- The `--port` / `-p` CLI option. It configured a TCP listener that was retired in v6.0 — the option did nothing. If your MCP config passes `-p`/`--port` in `args`, remove it.
+
+### Tests
+
+- Placeholder test replaced with a 30-test suite covering the interactive-command detector (table-driven), database round-trips plus a 50-writer concurrency test, the process runner (large-output no-deadlock proof, timeout termination), the output-capture script executed for real, shell/AppleScript escaping including a live injection-prevention check, and the auto-retrieve command-ID contract.
+
 ## [6.1.0] - 2026-06-08
 
 ### Added
