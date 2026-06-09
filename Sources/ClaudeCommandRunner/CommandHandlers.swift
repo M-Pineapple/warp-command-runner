@@ -89,8 +89,11 @@ struct InteractiveCommandDetector {
         // Normalise: collapse whitespace, trim
         let normalised = command.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        // Check for piped commands — analyse each segment
-        let segments = splitPipeline(normalised)
+        // Check for piped commands — analyse each segment, plus the full
+        // command. The full string matters for patterns that span a pipe
+        // (e.g. "curl … | sh"): splitting first removed the pipe, so those
+        // patterns could never match.
+        let segments = splitPipeline(normalised) + [normalised]
 
         // Check interactive patterns (highest severity first)
         for segment in segments {
