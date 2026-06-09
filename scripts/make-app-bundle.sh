@@ -27,10 +27,17 @@ BUILD_DIR="${PROJECT_ROOT}/.build/release"
 BINARY="${BUILD_DIR}/claude-command-runner"
 BUNDLE="${BUILD_DIR}/claude-command-runner.app"
 
-# Read version from the Swift source (single source of truth)
-VERSION=$(grep -E 'version: "[0-9]+\.[0-9]+\.[0-9]+"' "${PROJECT_ROOT}/Sources/ClaudeCommandRunner/ClaudeCommandRunner.swift" | head -1 | sed -E 's/.*version: "([^"]+)".*/\1/')
+# Read version from the Swift source (single source of truth: the
+# `static let version` constant). The `|| true` matters: under set -e a
+# non-matching grep would otherwise kill the script silently before the
+# bundle is created. Fall back to the older `version: "x.y.z"` pattern,
+# then to a hardcoded floor.
+VERSION=$(grep -E 'static let version = "[0-9]+\.[0-9]+\.[0-9]+"' "${PROJECT_ROOT}/Sources/ClaudeCommandRunner/ClaudeCommandRunner.swift" 2>/dev/null | head -1 | sed -E 's/.*version = "([^"]+)".*/\1/' || true)
 if [[ -z "${VERSION}" ]]; then
-    VERSION="6.0.3"
+    VERSION=$(grep -E 'version: "[0-9]+\.[0-9]+\.[0-9]+"' "${PROJECT_ROOT}/Sources/ClaudeCommandRunner/ClaudeCommandRunner.swift" 2>/dev/null | head -1 | sed -E 's/.*version: "([^"]+)".*/\1/' || true)
+fi
+if [[ -z "${VERSION}" ]]; then
+    VERSION="6.1.0"
 fi
 
 if [[ ! -f "${BINARY}" ]]; then
