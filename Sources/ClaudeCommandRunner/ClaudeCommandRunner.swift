@@ -90,6 +90,11 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
         // Load configuration
         let configManager = ConfigurationManager(logger: logger)
         let config = configManager.current
+
+        // Bound database growth: prune command history + analytics past the
+        // configured retention window and reclaim space. (These cleanup paths
+        // existed but were never called, so the DB grew without bound.)
+        DatabaseManager.shared.performStartupMaintenance(retentionDays: config.history.retentionDays)
         
         if validateConfig {
             let errors = configManager.validate()

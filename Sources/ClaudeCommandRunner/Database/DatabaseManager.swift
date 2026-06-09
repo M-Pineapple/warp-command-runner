@@ -9,8 +9,18 @@ fileprivate let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type
 public class DatabaseManager {
     internal var db: OpaquePointer?
     private let dbPath: String
-    internal let queue = DispatchQueue(label: "com.claude-command-runner.database", attributes: .concurrent)
-    
+    // Serial queue: SQLite connections are not safe for concurrent use from
+    // multiple threads unless the library is in serialized threading mode,
+    // which the system libsqlite3 does not guarantee. A serial queue (plus
+    // SQLITE_OPEN_FULLMUTEX, belt and braces) removes the data race; SQLite
+    // serialises internally anyway, so the old concurrent-reader design
+    // bought nothing.
+    internal let queue = DispatchQueue(label: "com.claude-command-runner.database")
+    private let logger = Logger(label: "com.claude.command-runner.database")
+
+    /// Current schema version; bump and add a migration step in migrateIfNeeded().
+    private static let schemaVersion: Int32 = 1
+
     public static let shared = DatabaseManager()
     
     private init() {
@@ -36,33 +46,45 @@ public class DatabaseManager {
     
     // MARK: - Setup
     
+    /// Open the database with serialized threading mode requested explicitly.
+    private func openDatabase() -> Int32 {
+        return sqlite3_open_v2(
+            dbPath,
+            &db,
+            SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX,
+            nil
+        )
+    }
+
     private func setupDatabase() {
-        print("[DatabaseManager] Setting up database at: \(dbPath)")
-        
+        // NOTE: never print() in this class — the MCP server speaks JSON-RPC
+        // over stdout, so stray stdout output corrupts the protocol stream.
+        // The Logging backend writes to stderr.
+        logger.debug("Setting up database at: \(dbPath)")
+
         // Check if database exists and verify integrity
         if FileManager.default.fileExists(atPath: dbPath) {
-            print("[DatabaseManager] Existing database found, checking integrity...")
-            
+            logger.debug("Existing database found, checking integrity...")
+
             // Open database
-            let result = sqlite3_open(dbPath, &db)
+            let result = openDatabase()
             if result != SQLITE_OK {
-                print("[DatabaseManager] Error opening database: \(String(cString: sqlite3_errmsg(db)))")
-                print("[DatabaseManager] SQLite error code: \(result)")
+                logger.error("Error opening database (code \(result)): \(String(cString: sqlite3_errmsg(db)))")
                 handleCorruptedDatabase()
                 return
             }
-            
+
             // Check integrity
             var integrityOK = true
             let checkSQL = "PRAGMA integrity_check;"
             var statement: OpaquePointer?
-            
+
             if sqlite3_prepare_v2(db, checkSQL, -1, &statement, nil) == SQLITE_OK {
                 while sqlite3_step(statement) == SQLITE_ROW {
                     if let result = sqlite3_column_text(statement, 0) {
                         let resultStr = String(cString: result)
                         if resultStr != "ok" {
-                            print("[DatabaseManager] Integrity check failed: \(resultStr)")
+                            logger.error("Integrity check failed: \(resultStr)")
                             integrityOK = false
                             break
                         }
@@ -70,60 +92,91 @@ public class DatabaseManager {
                 }
             }
             sqlite3_finalize(statement)
-            
+
             if !integrityOK {
-                print("[DatabaseManager] Database corrupted, recreating...")
+                logger.warning("Database corrupted, recreating...")
                 sqlite3_close(db)
                 db = nil
                 handleCorruptedDatabase()
                 return
             }
-            
-            print("[DatabaseManager] Database integrity check passed")
+
+            logger.debug("Database integrity check passed")
         } else {
-            print("[DatabaseManager] No existing database, creating new one...")
-            
+            logger.debug("No existing database, creating new one...")
+
             // Create new database
-            let result = sqlite3_open(dbPath, &db)
+            let result = openDatabase()
             if result != SQLITE_OK {
-                print("[DatabaseManager] Error creating database: \(String(cString: sqlite3_errmsg(db)))")
-                print("[DatabaseManager] SQLite error code: \(result)")
+                logger.error("Error creating database (code \(result)): \(String(cString: sqlite3_errmsg(db)))")
+                db = nil
                 return
             }
         }
-        
-        print("[DatabaseManager] Database opened successfully")
-        print("[DatabaseManager] Database pointer: \(String(describing: db))")
-        
+
         // Enable foreign keys
         execute("PRAGMA foreign_keys = ON")
-        
+
         // Create tables
         createTables()
-        
-        print("[DatabaseManager] Database setup complete")
+        migrateIfNeeded()
+
+        logger.debug("Database setup complete")
     }
-    
+
     private func handleCorruptedDatabase() {
+        // Make sure a half-open handle from the failed sqlite3_open_v2 is
+        // released before we move the file out of the way.
+        if db != nil {
+            sqlite3_close(db)
+            db = nil
+        }
+
         // Backup corrupted database
         let backupPath = dbPath + ".corrupted.\(Date().timeIntervalSince1970)"
         try? FileManager.default.moveItem(atPath: dbPath, toPath: backupPath)
-        print("[DatabaseManager] Corrupted database backed up to: \(backupPath)")
-        
+        logger.warning("Corrupted database backed up to: \(backupPath)")
+
         // Create new database
-        let result = sqlite3_open(dbPath, &db)
+        let result = openDatabase()
         if result != SQLITE_OK {
-            print("[DatabaseManager] CRITICAL: Failed to create new database: \(String(cString: sqlite3_errmsg(db)))")
+            logger.critical("Failed to create new database: \(String(cString: sqlite3_errmsg(db)))")
+            // Leave db nil; all operations check isOpen and degrade gracefully.
+            db = nil
             return
         }
-        
-        print("[DatabaseManager] New database created successfully")
-        
+
+        logger.info("New database created successfully")
+
         // Enable foreign keys
         execute("PRAGMA foreign_keys = ON")
-        
+
         // Create tables
         createTables()
+        migrateIfNeeded()
+    }
+
+    /// True when a usable SQLite handle is available. Every operation must
+    /// check this: calling sqlite3_* with a NULL handle is undefined behaviour.
+    internal var isOpen: Bool { db != nil }
+
+    /// Read PRAGMA user_version and apply migrations as needed.
+    private func migrateIfNeeded() {
+        guard isOpen else { return }
+        var statement: OpaquePointer?
+        var version: Int32 = 0
+        if sqlite3_prepare_v2(db, "PRAGMA user_version", -1, &statement, nil) == SQLITE_OK,
+           sqlite3_step(statement) == SQLITE_ROW {
+            version = sqlite3_column_int(statement, 0)
+        }
+        sqlite3_finalize(statement)
+
+        if version < Self.schemaVersion {
+            // Future migrations go here, gated on `version`. Version 1 is the
+            // baseline created by createTables().
+            execute("PRAGMA user_version = \(Self.schemaVersion)")
+            logger.debug("Schema version set to \(Self.schemaVersion) (was \(version))")
+        }
     }
     
     private func createTables() {
@@ -208,22 +261,23 @@ public class DatabaseManager {
         ]
         
         // Execute all CREATE statements
-        for statement in [createCommandsTable, createProjectsTable, createTemplatesTable, 
+        for statement in [createCommandsTable, createProjectsTable, createTemplatesTable,
                          createPluginsTable, createAnalyticsTable] + indexes {
             if !execute(statement) {
-                print("Failed to create table/index")
+                logger.error("Failed to create table/index")
             }
         }
     }
-    
+
     // MARK: - Core Operations
-    
+
     @discardableResult
     private func execute(_ sql: String) -> Bool {
-        return queue.sync(flags: .barrier) {
+        return queue.sync {
+            guard isOpen else { return false }
             let result = sqlite3_exec(db, sql, nil, nil, nil)
             if result != SQLITE_OK {
-                print("SQL Error: \(String(cString: sqlite3_errmsg(db)))")
+                logger.error("SQL Error: \(String(cString: sqlite3_errmsg(db)))")
                 return false
             }
             return true
@@ -233,20 +287,20 @@ public class DatabaseManager {
     // MARK: - Command Operations
     
     public func saveCommand(_ command: CommandRecord) -> Bool {
-        return queue.sync(flags: .barrier) {
+        return queue.sync {
+            guard isOpen else { return false }
             let sql = """
-                INSERT INTO commands (id, command, directory, exit_code, stdout, stderr, 
-                                    started_at, completed_at, duration_ms, terminal_type, 
+                INSERT INTO commands (id, command, directory, exit_code, stdout, stderr,
+                                    started_at, completed_at, duration_ms, terminal_type,
                                     project_id, tags, metadata)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """
-            
+
             var statement: OpaquePointer?
             defer { sqlite3_finalize(statement) }
-            
+
             guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-                print("[DatabaseManager] Failed to prepare INSERT statement: \(String(cString: sqlite3_errmsg(db)))")
-                print("[DatabaseManager] SQL: \(sql)")
+                logger.error("Failed to prepare INSERT statement: \(String(cString: sqlite3_errmsg(db)))")
                 return false
             }
             
@@ -291,22 +345,22 @@ public class DatabaseManager {
             
             let stepResult = sqlite3_step(statement)
             if stepResult == SQLITE_DONE {
-                print("[DatabaseManager] Command saved successfully: \(command.id)")
+                logger.debug("Command saved: \(command.id)")
                 return true
             } else {
-                print("[DatabaseManager] Failed to save command: \(String(cString: sqlite3_errmsg(db)))")
-                print("[DatabaseManager] SQLite step result: \(stepResult)")
+                logger.error("Failed to save command (step result \(stepResult)): \(String(cString: sqlite3_errmsg(db)))")
                 return false
             }
         }
     }
-    
+
     public func updateCommand(_ commandId: String, stdout: String?, stderr: String?, exitCode: Int?, completedAt: Date) -> Bool {
-        // Resolve the start time OUTSIDE the barrier: getCommandStartTime runs its
-        // own queue.sync, and nesting that inside a barrier block on the same queue
+        // Resolve the start time OUTSIDE the sync block: getCommandStartTime runs
+        // its own queue.sync, and nesting that inside a block on the same queue
         // deadlocks. (Latent since this method had no callers until v6.0.5.)
         let startTime = getCommandStartTime(commandId)
-        return queue.sync(flags: .barrier) {
+        return queue.sync {
+            guard isOpen else { return false }
             let duration = startTime.map { Int(completedAt.timeIntervalSince($0) * 1000) }
 
             let sql = """
@@ -347,6 +401,7 @@ public class DatabaseManager {
     
     private func getCommandStartTime(_ commandId: String) -> Date? {
         return queue.sync {
+            guard isOpen else { return nil }
             let sql = "SELECT started_at FROM commands WHERE id = ?"
             var statement: OpaquePointer?
             defer { sqlite3_finalize(statement) }
@@ -368,6 +423,7 @@ public class DatabaseManager {
     
     public func getRecentCommands(limit: Int = 10) -> [CommandRecord] {
         return queue.sync {
+            guard isOpen else { return [] }
             let sql = """
                 SELECT id, command, directory, exit_code, stdout, stderr, 
                        started_at, completed_at, duration_ms, terminal_type, 
@@ -442,6 +498,7 @@ public class DatabaseManager {
     
     public func searchCommands(query: String, limit: Int = 50) -> [CommandRecord] {
         return queue.sync {
+            guard isOpen else { return [] }
             let sql = """
                 SELECT id, command, directory, exit_code, stdout, stderr, 
                        started_at, completed_at, duration_ms, terminal_type, 
@@ -484,28 +541,29 @@ extension DatabaseManager {
     // MARK: - Project Management
     
     public func createProject(name: String, path: String?, gitRemote: String? = nil) -> String? {
-        return queue.sync(flags: .barrier) {
+        return queue.sync {
+            guard isOpen else { return nil }
             let id = UUID().uuidString
             let sql = """
                 INSERT INTO projects (id, name, path, git_remote)
                 VALUES (?, ?, ?, ?)
             """
-            
+
             var statement: OpaquePointer?
             defer { sqlite3_finalize(statement) }
-            
+
             guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-                print("Failed to prepare project insert: \(String(cString: sqlite3_errmsg(db)))")
+                logger.error("Failed to prepare project insert: \(String(cString: sqlite3_errmsg(db)))")
                 return nil
             }
-            
+
             sqlite3_bind_text(statement, 1, id, -1, SQLITE_TRANSIENT)
             sqlite3_bind_text(statement, 2, name, -1, SQLITE_TRANSIENT)
             sqlite3_bind_text(statement, 3, path, -1, SQLITE_TRANSIENT)
             sqlite3_bind_text(statement, 4, gitRemote, -1, SQLITE_TRANSIENT)
-            
+
             guard sqlite3_step(statement) == SQLITE_DONE else {
-                print("Failed to insert project: \(String(cString: sqlite3_errmsg(db)))")
+                logger.error("Failed to insert project: \(String(cString: sqlite3_errmsg(db)))")
                 return nil
             }
             
@@ -515,6 +573,7 @@ extension DatabaseManager {
     
     public func getProject(byPath path: String) -> Project? {
         return queue.sync {
+            guard isOpen else { return nil }
             let sql = "SELECT id, name, path, git_remote, created_at, metadata FROM projects WHERE path = ?"
             
             var statement: OpaquePointer?
@@ -542,8 +601,9 @@ extension DatabaseManager {
         
         // Check if directory is within a known project
         return queue.sync {
+            guard isOpen else { return nil }
             let sql = """
-                SELECT id, name, path FROM projects 
+                SELECT id, name, path FROM projects
                 WHERE ? LIKE path || '%'
                 ORDER BY LENGTH(path) DESC
                 LIMIT 1
@@ -596,6 +656,7 @@ extension DatabaseManager {
     
     public func getTemplates(category: String? = nil) -> [Template] {
         return queue.sync {
+            guard isOpen else { return [] }
             var sql = """
                 SELECT id, name, command, description, category, variables, usage_count, created_at, updated_at
                 FROM templates
@@ -665,13 +726,15 @@ extension DatabaseManager {
     // MARK: - Analytics
     
     public func recordAnalyticsEvent(_ eventType: String, data: [String: Any]? = nil) {
-        queue.async(flags: .barrier) {
+        queue.async {
+            guard self.isOpen else { return }
             let sql = "INSERT INTO analytics (event_type, event_data) VALUES (?, ?)"
-            
+
             var statement: OpaquePointer?
             defer { sqlite3_finalize(statement) }
-            
+
             guard sqlite3_prepare_v2(self.db, sql, -1, &statement, nil) == SQLITE_OK else {
+                self.logger.error("Failed to prepare analytics insert: \(String(cString: sqlite3_errmsg(self.db)))")
                 return
             }
             

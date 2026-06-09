@@ -231,9 +231,9 @@ private func checkDatabaseHealth() -> (status: String, detail: String) {
             sizeStr = String(format: "%.1f MB", Double(fileSize) / (1024.0 * 1024.0))
         }
         
-        // Get total command count
-        let recentCommands = DatabaseManager.shared.getRecentCommands(limit: 9999)
-        let totalCount = recentCommands.count
+        // Get total command count via COUNT(*) — the old approach materialised
+        // up to 9,999 full records (including stdout/stderr blobs) just to count.
+        let totalCount = DatabaseManager.shared.commandCount()
         
         return ("✅", "OK (\(totalCount) commands, \(sizeStr))")
     } catch {

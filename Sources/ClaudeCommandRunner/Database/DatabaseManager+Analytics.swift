@@ -7,6 +7,13 @@ extension DatabaseManager {
     
     public func getCommandStatistics(days: Int = 30) -> CommandStatistics {
         return queue.sync {
+            guard isOpen else {
+                return CommandStatistics(
+                    totalCommands: 0, successCount: 0, failureCount: 0,
+                    averageDuration: 0, topCommands: [], topDirectories: [],
+                    commandsByHour: [], commandsByDay: []
+                )
+            }
             let cutoffDate = Date().addingTimeInterval(-Double(days * 24 * 60 * 60))
             
             // Total commands
@@ -248,33 +255,85 @@ extension DatabaseManager {
         return results
     }
     
+    // MARK: - Counts
+
+    /// Cheap row count for health checks (avoids materialising full records).
+    public func commandCount() -> Int {
+        return queue.sync {
+            guard isOpen else { return 0 }
+            return getCount(sql: "SELECT COUNT(*) FROM commands")
+        }
+    }
+
     // MARK: - Cleanup
-    
+
     public func cleanupOldCommands(olderThan days: Int) -> Int {
-        return queue.sync(flags: .barrier) {
+        return queue.sync {
+            guard isOpen else { return 0 }
             let cutoffDate = Date().addingTimeInterval(-Double(days * 24 * 60 * 60))
             let sql = "DELETE FROM commands WHERE started_at < ?"
-            
+
             var statement: OpaquePointer?
             defer { sqlite3_finalize(statement) }
-            
+
             guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
                 return 0
             }
-            
+
             sqlite3_bind_double(statement, 1, cutoffDate.timeIntervalSince1970)
-            
+
             guard sqlite3_step(statement) == SQLITE_DONE else {
                 return 0
             }
-            
+
             return Int(sqlite3_changes(db))
         }
     }
-    
+
+    /// Prune analytics events past the retention window. Analytics were
+    /// previously written on every command with no cleanup path at all,
+    /// so the table grew without bound.
+    public func cleanupOldAnalytics(olderThan days: Int) -> Int {
+        return queue.sync {
+            guard isOpen else { return 0 }
+            let cutoffDate = Date().addingTimeInterval(-Double(days * 24 * 60 * 60))
+            // The analytics timestamp column is CURRENT_TIMESTAMP text, so
+            // compare against an ISO-ish datetime rather than a unix epoch.
+            let sql = "DELETE FROM analytics WHERE timestamp < datetime(?, 'unixepoch')"
+
+            var statement: OpaquePointer?
+            defer { sqlite3_finalize(statement) }
+
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+                return 0
+            }
+
+            sqlite3_bind_double(statement, 1, cutoffDate.timeIntervalSince1970)
+
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                return 0
+            }
+
+            return Int(sqlite3_changes(db))
+        }
+    }
+
     public func vacuum() {
-        queue.async(flags: .barrier) {
+        queue.async {
+            guard self.isOpen else { return }
             sqlite3_exec(self.db, "VACUUM", nil, nil, nil)
+        }
+    }
+
+    /// Startup maintenance: bound history growth and reclaim space.
+    /// Called once from run(); cleanupOldCommands/vacuum previously existed
+    /// but had no callers anywhere.
+    public func performStartupMaintenance(retentionDays: Int) {
+        guard retentionDays > 0 else { return }
+        let removedCommands = cleanupOldCommands(olderThan: retentionDays)
+        let removedEvents = cleanupOldAnalytics(olderThan: retentionDays)
+        if removedCommands > 0 || removedEvents > 0 {
+            vacuum()
         }
     }
 }
