@@ -155,7 +155,29 @@ func handleExecutePipeline(params: CallTool.Parameters, logger: Logger, config: 
             duration: stepDuration,
             status: success ? .success : .failed
         ))
-        
+
+        // Record this executed step in command history (parity with
+        // execute_command — pipeline steps previously were never logged).
+        let stepId = UUID().uuidString
+        let stepProjectId = DatabaseManager.shared.detectProjectFromDirectory(
+            step.workingDirectory ?? FileManager.default.currentDirectoryPath
+        )
+        let stepRecord = CommandRecord(
+            id: stepId,
+            command: step.command,
+            directory: step.workingDirectory,
+            terminalType: "pipeline",
+            projectId: stepProjectId
+        )
+        _ = DatabaseManager.shared.saveCommand(stepRecord)
+        _ = DatabaseManager.shared.updateCommand(
+            stepId,
+            stdout: result.output,
+            stderr: result.error,
+            exitCode: Int(result.exitCode),
+            completedAt: Date()
+        )
+
         // Handle failure based on onFail setting
         if !success {
             switch step.onFail {
@@ -678,6 +700,50 @@ func handleListTemplates(params: CallTool.Parameters, logger: Logger) async -> C
     output += "Total: \(templates.count) template(s)"
     
     return CallTool.Result(content: [.text(output)], isError: false)
+}
+
+/// Delete a saved template by name
+func handleDeleteTemplate(params: CallTool.Parameters, logger: Logger) async -> CallTool.Result {
+    guard let arguments = params.arguments,
+          let nameValue = arguments["name"],
+          case .string(let name) = nameValue else {
+        return CallTool.Result(
+            content: [.text("❌ Missing required parameter: 'name'")],
+            isError: true
+        )
+    }
+
+    var templates = loadTemplates()
+    let before = templates.count
+    templates.removeAll { $0.name == name }
+
+    guard templates.count < before else {
+        let available = templates.map { $0.name }.joined(separator: ", ")
+        return CallTool.Result(
+            content: [.text("❌ Template '\(name)' not found.\nAvailable templates: \(available.isEmpty ? "none" : available)")],
+            isError: true
+        )
+    }
+
+    do {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .prettyPrinted
+        let data = try encoder.encode(templates)
+        let dir = (templatesFilePath as NSString).deletingLastPathComponent
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        try data.write(to: URL(fileURLWithPath: templatesFilePath))
+        logger.info("Deleted template: \(name)")
+        return CallTool.Result(
+            content: [.text("✅ Template '\(name)' deleted. \(templates.count) template(s) remaining.")],
+            isError: false
+        )
+    } catch {
+        logger.error("Failed to delete template: \(error)")
+        return CallTool.Result(
+            content: [.text("❌ Failed to delete template: \(error.localizedDescription)")],
+            isError: true
+        )
+    }
 }
 
 /// Load templates from disk

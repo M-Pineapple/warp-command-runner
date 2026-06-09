@@ -28,18 +28,29 @@ public struct TerminalConfig {
     
     /// Get the preferred terminal from config or auto-detect
     public static func getPreferredTerminal() -> TerminalType {
-        // TODO: Read from config file first
-        
-        // Auto-detect in order of preference
-        let preferences: [TerminalType] = [.warp, .warpPreview, .iterm2, .terminal]
+        // 1. Honour an explicit preference from config.json (terminal.preferred).
+        //    Loaded quietly (logger nil) so this stays cheap to call.
+        let config = ConfigurationManager.load()
+        if let preferred = config.getPreferredTerminal() {
+            return preferred
+        }
+
+        // 2. Auto-detect, honouring the configured fallback order when present,
+        //    otherwise a sensible default order.
         let installed = detectInstalledTerminals()
-        
+        let configuredOrder: [TerminalType] = config.terminal.fallbackOrder.compactMap { raw in
+            TerminalType.allCases.first { $0.rawValue.lowercased() == raw.lowercased() }
+        }
+        let preferences = configuredOrder.isEmpty
+            ? [.warp, .warpPreview, .iterm2, .terminal]
+            : configuredOrder
+
         for preference in preferences {
             if installed.contains(preference) {
                 return preference
             }
         }
-        
+
         // Fallback to Terminal.app
         return .terminal
     }

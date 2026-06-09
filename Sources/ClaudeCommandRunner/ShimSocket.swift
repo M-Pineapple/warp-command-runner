@@ -56,6 +56,15 @@ actor ShellShimEventBus {
     func snapshot() -> (count: Int, total: Int, lastAt: Date?) {
         return (events.count, totalReceived, lastConnectedAt)
     }
+
+    /// Find the most recent `command_finished` event whose command line
+    /// references the given command id. `execute_command` injects
+    /// `bash /tmp/claude_script_<id>.sh`, so the shim observes that path —
+    /// letting us confirm completion and read the authoritative shell exit code.
+    func finishedEvent(forCommandId id: String) -> ShellShimEvent? {
+        let needle = "claude_script_\(id)"
+        return events.last { $0.type == "command_finished" && ($0.command?.contains(needle) ?? false) }
+    }
 }
 
 /// Global bus.

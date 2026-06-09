@@ -5,6 +5,25 @@ All notable changes to Claude Command Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.0] - 2026-06-08
+
+### Added
+
+- **`delete_template`** — new tool to remove a saved template by name, completing the template CRUD (save / run / list / delete). Tool count 39 → 40.
+- **Shell-shim exit-code confirmation.** When the optional shell shim is active, `get_command_output` now confirms completion using the shell's authoritative exit code (the shim observes the real command finishing). It cross-checks the `/tmp` capture, prefers the shim's value if they disagree, and can report completion even when the capture file is missing. No-op when the shim isn't installed.
+
+### Changed
+
+- **`capture_environment` now captures your real shell environment.** It previously ran a non-login `/bin/bash` that inherited the MCP server's minimal environment (~9 vars, no profile sourced), which made before/after diffs useless. It now spawns your login + interactive shell (`$SHELL -l -i -c env`) so `~/.zprofile` / `~/.zshrc` are sourced, with a timeout watchdog and a graceful fallback to the process environment.
+- **`execute_pipeline` steps are now recorded in command history** (exit code + duration), visible via `list_recent_commands`. Previously only `execute_command` was logged.
+- **`suggest_command` accepts an optional `working_directory`**, so its context-aware git / Swift / Node suggestions actually fire (the server's own CWD is `/`, which suppressed them). The find-pattern no longer emits nonsense globs for natural-language queries.
+- **`TerminalConfig.getPreferredTerminal()` honours `config.json`** (`terminal.preferred` and `terminal.fallbackOrder`) before auto-detecting.
+- MCP `serverInfo.version` 6.0.5 → 6.1.0.
+
+### Notes
+
+- Deterministic per-tab / per-pane targeting remains intentionally out of scope — Warp exposes no API for it. That work is gated on Warp's "Warp CLI" roadmap item and will land when their control surface ships.
+
 ## [6.0.5] - 2026-06-07
 
 ### Fixed

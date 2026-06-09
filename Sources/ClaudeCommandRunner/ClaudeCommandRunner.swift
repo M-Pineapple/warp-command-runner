@@ -118,7 +118,7 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
         // Create the MCP server
         let server = Server(
             name: "Claude Command Runner",
-            version: "6.0.5",
+            version: "6.1.0",
             capabilities: .init(
                 tools: .init(listChanged: false)
             )
@@ -141,6 +141,10 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
                             "query": .object([
                                 "type": .string("string"),
                                 "description": .string("The user's request or task description")
+                            ]),
+                            "working_directory": .object([
+                                "type": .string("string"),
+                                "description": .string("Optional project directory; enables context-aware git/Swift/Node suggestions")
                             ])
                         ]),
                         "required": .array([.string("query")])
@@ -302,6 +306,20 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
                         "type": .string("object"),
                         "properties": .object([:]),
                         "required": .array([])
+                    ])
+                ),
+                Tool(
+                    name: "delete_template",
+                    description: "Delete a saved command template by name",
+                    inputSchema: .object([
+                        "type": .string("object"),
+                        "properties": .object([
+                            "name": .object([
+                                "type": .string("string"),
+                                "description": .string("Name of the template to delete")
+                            ])
+                        ]),
+                        "required": .array([.string("name")])
                     ])
                 ),
                 // NEW v4.1 TOOLS
@@ -849,6 +867,8 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
                 return try await handleRunTemplate(params: params, logger: logger, config: config)
             case "list_templates":
                 return await handleListTemplates(params: params, logger: logger)
+            case "delete_template":
+                return await handleDeleteTemplate(params: params, logger: logger)
             // NEW v4.1 TOOL HANDLERS
             case "list_recent_commands":
                 return await handleListRecentCommands(params: params, logger: logger)
@@ -1058,39 +1078,68 @@ func handleGetCommandOutput(params: CallTool.Parameters, logger: Logger) async -
     }
     
     if let result = result {
+        // Shim confirmation (Tier E): if the optional shell shim observed this
+        // command finishing, its exit code came straight from the shell and is
+        // authoritative (the /tmp wrapper can mis-record or fail to write).
+        let shimEvent = await shellShimEventBus.finishedEvent(forCommandId: result.commandId)
+        let authoritativeExit: Int32 = shimEvent?.exitCode.map { Int32($0) } ?? result.exitCode
+
         // Persist the completed result to the history DB (exit code + duration).
         // No-op if the id isn't a tracked command (e.g. a "last"-resolved file).
         _ = DatabaseManager.shared.updateCommand(
             result.commandId,
             stdout: result.output,
             stderr: result.error,
-            exitCode: Int(result.exitCode),
+            exitCode: Int(authoritativeExit),
             completedAt: result.timestamp
         )
         var output = """
         📊 Command Output Retrieved:
         ========================
         Command: \(result.command)
-        Exit Code: \(result.exitCode)
+        Exit Code: \(authoritativeExit)
         Timestamp: \(result.timestamp)
-        
+
         Output:
         \(result.output)
         """
-        
+
         if !result.error.isEmpty && result.error != "\n" {
             output += "\n\nError Output:\n\(result.error)"
         }
-        
+
+        if let shimExit = shimEvent?.exitCode {
+            if Int32(shimExit) == result.exitCode {
+                output += "\n\n🔌 Completion confirmed by shell shim (exit \(shimExit))."
+            } else {
+                output += "\n\n🔌 Shell shim reports exit \(shimExit) (capture file recorded \(result.exitCode)); using the shim value as authoritative."
+            }
+        }
+
         return CallTool.Result(content: [.text(output)], isError: false)
     } else {
+        // No /tmp capture file. If the shim saw this exact command finish, we can
+        // still confirm completion + the authoritative exit code even though the
+        // output itself wasn't captured.
+        if commandId != "last",
+           let shimEvent = await shellShimEventBus.finishedEvent(forCommandId: commandId),
+           let shimExit = shimEvent.exitCode {
+            _ = DatabaseManager.shared.updateCommand(
+                commandId, stdout: nil, stderr: nil, exitCode: shimExit, completedAt: Date()
+            )
+            return CallTool.Result(content: [.text("""
+            🔌 Command finished (exit \(shimExit)) — confirmed by the shell shim.
+            The output-capture file for ID \(commandId) isn't available, so stdout/stderr couldn't be returned, but the command did complete.
+            """)], isError: false)
+        }
+
         // List available output files for debugging
         let tempDir = "/tmp"
         let files = try? FileManager.default.contentsOfDirectory(atPath: tempDir)
             .filter { $0.starts(with: "claude_output_") && $0.hasSuffix(".json") }
             .sorted()
             .suffix(5)
-        
+
         var message = "No output found for command ID: \(commandId). The command may still be running or hasn't been executed yet."
         if let files = files, !files.isEmpty {
             message += "\n\nRecent output files available:\n" + files.joined(separator: "\n")

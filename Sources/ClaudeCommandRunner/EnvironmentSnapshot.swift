@@ -57,69 +57,38 @@ func handleCaptureEnvironment(params: CallTool.Parameters, logger: Logger) async
 
     logger.info("Capturing environment snapshot: \(name)")
 
-    // Build and execute env capture script
-    var script = ""
-    if let dir = workingDirectory {
-        script += "cd \"\(dir)\" 2>/dev/null; "
-    }
-    script += "env | sort"
+    // Capture the user's REAL interactive-login shell environment (sources
+    // ~/.zprofile, ~/.zshrc, etc.) rather than the MCP server's own minimal
+    // inherited environment. Falls back to the process environment on failure.
+    let capture = captureRealShellEnvironment(workingDirectory: workingDirectory, logger: logger)
+    let variables = capture.variables
+    let cwd = variables["PWD"] ?? workingDirectory ?? capture.directory
 
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/bin/bash")
-    process.arguments = ["-c", script]
+    let snapshot = EnvironmentSnapshotData(
+        name: name,
+        variables: variables,
+        timestamp: Date(),
+        directory: cwd
+    )
 
-    let outputPipe = Pipe()
-    process.standardOutput = outputPipe
-    process.standardError = Pipe()
+    await environmentStore.store(name: name, snapshot: snapshot)
+    persistSnapshot(snapshot, logger: logger)
 
-    do {
-        try process.run()
-        process.waitUntilExit()
+    let sourceNote = capture.viaFallback
+        ? "\n⚠️ Source: MCP process environment (shell capture unavailable) — PATH and profile-defined vars may be missing."
+        : "\n• Source: your \(capture.shell) login shell (~/.zshrc / profile sourced)"
 
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: outputData, encoding: .utf8) ?? ""
+    return CallTool.Result(
+        content: [.text("""
+        ✅ Environment snapshot captured: "\(name)"
+        • Variables: \(variables.count)
+        • Directory: \(cwd)\(sourceNote)
+        • Timestamp: \(ISO8601DateFormatter().string(from: snapshot.timestamp))
 
-        // Parse environment variables
-        var variables: [String: String] = [:]
-        for line in output.components(separatedBy: "\n") {
-            let parts = line.split(separator: "=", maxSplits: 1)
-            if parts.count == 2 {
-                variables[String(parts[0])] = String(parts[1])
-            }
-        }
-
-        let cwd = variables["PWD"] ?? workingDirectory ?? "unknown"
-
-        let snapshot = EnvironmentSnapshotData(
-            name: name,
-            variables: variables,
-            timestamp: Date(),
-            directory: cwd
-        )
-
-        await environmentStore.store(name: name, snapshot: snapshot)
-
-        // Optionally persist to disk
-        persistSnapshot(snapshot, logger: logger)
-
-        return CallTool.Result(
-            content: [.text("""
-            ✅ Environment snapshot captured: "\(name)"
-            • Variables: \(variables.count)
-            • Directory: \(cwd)
-            • Timestamp: \(ISO8601DateFormatter().string(from: snapshot.timestamp))
-
-            💡 Use 'diff_environment' with two snapshot names to compare.
-            """)],
-            isError: false
-        )
-    } catch {
-        logger.error("Failed to capture environment: \(error)")
-        return CallTool.Result(
-            content: [.text("❌ Failed to capture environment: \(error.localizedDescription)")],
-            isError: true
-        )
-    }
+        💡 Use 'diff_environment' with two snapshot names to compare.
+        """)],
+        isError: false
+    )
 }
 
 /// Handle diff_environment tool — compares two snapshots
@@ -239,4 +208,86 @@ private func persistSnapshot(_ snapshot: EnvironmentSnapshotData, logger: Logger
         try? data.write(to: file)
         logger.debug("Snapshot persisted to \(file.path)")
     }
+}
+
+// MARK: - Real shell environment capture
+
+/// Capture the user's actual interactive-login shell environment.
+///
+/// The MCP server runs as a child of Claude Desktop, so its own environment is
+/// a minimal inherited set (often ~9 vars, CWD `/`). To represent what the
+/// user's terminal actually sees, we spawn their login + interactive shell
+/// (`$SHELL -l -i -c env`), which sources ~/.zprofile, ~/.zshrc, etc. A watchdog
+/// terminates the shell if a slow rc file would otherwise hang the capture, and
+/// on any failure we fall back to the process environment so the tool never
+/// breaks.
+func captureRealShellEnvironment(
+    workingDirectory: String?,
+    timeout: TimeInterval = 8.0,
+    logger: Logger
+) -> (variables: [String: String], shell: String, directory: String, viaFallback: Bool) {
+    let shellPath = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+    let shellName = (shellPath as NSString).lastPathComponent
+    let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+    let workDir = workingDirectory ?? homeDir
+
+    func fallback() -> (variables: [String: String], shell: String, directory: String, viaFallback: Bool) {
+        let env = ProcessInfo.processInfo.environment
+        return (env, shellName, env["PWD"] ?? workDir, true)
+    }
+
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: shellPath)
+    // -l (login) sources ~/.zprofile/.profile; -i (interactive) sources
+    // ~/.zshrc/.bashrc — where most users actually set PATH and exports.
+    process.arguments = ["-l", "-i", "-c", "env"]
+    process.currentDirectoryURL = URL(fileURLWithPath: workDir)
+    // Detach stdin so an interactive shell can't block waiting for input.
+    process.standardInput = FileHandle.nullDevice
+    let outputPipe = Pipe()
+    process.standardOutput = outputPipe
+    process.standardError = Pipe()  // discard rc-file chatter
+
+    do {
+        try process.run()
+    } catch {
+        logger.error("capture_environment: failed to spawn \(shellPath): \(error)")
+        return fallback()
+    }
+
+    // Watchdog: wait for exit up to `timeout`; if a slow rc hangs it, terminate
+    // and fall back rather than blocking the tool indefinitely.
+    let done = DispatchSemaphore(value: 0)
+    DispatchQueue.global(qos: .userInitiated).async {
+        process.waitUntilExit()
+        done.signal()
+    }
+    if done.wait(timeout: .now() + timeout) == .timedOut {
+        logger.warning("capture_environment: \(shellName) capture timed out after \(Int(timeout))s; terminating and falling back.")
+        process.terminate()
+        _ = done.wait(timeout: .now() + 1.0)
+        return fallback()
+    }
+
+    let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+    let output = String(data: data, encoding: .utf8) ?? ""
+
+    var variables: [String: String] = [:]
+    for line in output.components(separatedBy: "\n") {
+        guard let eq = line.firstIndex(of: "=") else { continue }
+        let key = String(line[line.startIndex..<eq])
+        // Real env keys are identifiers; skip any noise an interactive rc might
+        // print to stdout that happens to contain '='.
+        guard !key.isEmpty, key.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" }) else { continue }
+        variables[key] = String(line[line.index(after: eq)...])
+    }
+
+    // If the shell yielded essentially nothing, prefer the fallback over storing
+    // a misleadingly-empty snapshot.
+    if variables.count <= 1 {
+        logger.warning("capture_environment: \(shellName) produced \(variables.count) var(s); falling back to process env.")
+        return fallback()
+    }
+
+    return (variables, shellName, variables["PWD"] ?? workDir, false)
 }

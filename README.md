@@ -4,7 +4,7 @@
   <img src="assets/icon.svg" width="256" alt="Claude Command Runner — terminal prompt, Warp glyph, Claude asterisk">
 </div>
 
-**Lets Claude actually use your terminal.** You ask, Claude types the command into your [Warp](https://app.warp.dev/referral/G9W3EY) tab, captures the output, and tells you what happened. It's a Model Context Protocol (MCP) server with 39 tools — command execution, project setups, file watching, SSH, clipboard, environment intelligence — and the same binary works from both Claude Desktop and Warp's built-in AI agent panel. macOS, Swift, open source.
+**Lets Claude actually use your terminal.** You ask, Claude types the command into your [Warp](https://app.warp.dev/referral/G9W3EY) tab, captures the output, and tells you what happened. It's a Model Context Protocol (MCP) server with 40 tools — command execution, project setups, file watching, SSH, clipboard, environment intelligence — and the same binary works from both Claude Desktop and Warp's built-in AI agent panel. macOS, Swift, open source.
 
 > Built for [Warp Terminal](https://app.warp.dev/referral/G9W3EY) (free, open source AGPL-3.0). The 5 most powerful tools route commands visibly into your active Warp tab — that's the magic of this MCP. If you don't use Warp yet, [grab it here](https://app.warp.dev/referral/G9W3EY) — it pairs with this MCP for what's probably the closest thing to "Claude with a real terminal" you can get right now.
 
@@ -64,7 +64,7 @@ Claude Command Runner is a **dual-consumer MCP server** — the same binary serv
 
 ## 🧭 Which Claude product does this work with?
 
-`claude-command-runner` is an MCP server, so any Anthropic surface that consumes MCP servers can call its 39 tools — but the **value-add varies sharply by consumer**, and you should pick deliberately.
+`claude-command-runner` is an MCP server, so any Anthropic surface that consumes MCP servers can call its 40 tools — but the **value-add varies sharply by consumer**, and you should pick deliberately.
 
 | Consumer | Where to register | Value-add | Recommended? |
 |---|---|---|---|
@@ -82,7 +82,7 @@ Claude Command Runner is a **dual-consumer MCP server** — the same binary serv
 - **You use Warp's native agent panel?** → Register in `~/.warp/.mcp.json`.
 - **You don't use Warp?** → This isn't the right MCP for you. Look at simpler subprocess-based MCPs.
 
-The "39 tools" headline is honest but slightly misleading: 5 of those tools (the AppleScript-keystroke ones — `execute_command`, `execute_with_auto_retrieve`, `execute_with_streaming`, `run_template`, `send_to_session`) are the Warp-routing crown jewels, and 24 of them are pure server-side utilities that any subprocess-based MCP could provide. The remaining 10 sit in between (deeplinks, OSC 777, profiles, file watchers). If the Warp-routing 5 don't appeal, the rest of this MCP is fine but unremarkable.
+The "40 tools" headline is honest but slightly misleading: 5 of those tools (the AppleScript-keystroke ones — `execute_command`, `execute_with_auto_retrieve`, `execute_with_streaming`, `run_template`, `send_to_session`) are the Warp-routing crown jewels, and 25 of them are pure server-side utilities that any subprocess-based MCP could provide. The remaining 10 sit in between (deeplinks, OSC 777, profiles, file watchers). If the Warp-routing 5 don't appeal, the rest of this MCP is fine but unremarkable.
 
 ## 🎯 Key Features
 
@@ -394,7 +394,7 @@ Pure subprocess, no AppleScript, no TCC layer, captures output cleanly, works on
 
 ## Usage
 
-### Available Tools (39)
+### Available Tools (40)
 
 #### Core Execution
 
@@ -407,9 +407,10 @@ Pure subprocess, no AppleScript, no TCC layer, captures output cleanly, works on
 | `save_template` | Save reusable command pattern | Create shortcuts |
 | `run_template` | Execute saved template with variables | Run saved patterns |
 | `list_templates` | View all saved templates | Manage templates |
+| `delete_template` | Remove a saved template by name | Manage templates |
 | `get_command_output` | Manually retrieve command output | Debugging |
 | `preview_command` | Preview without executing | Safety check |
-| `suggest_command` | Get command suggestions | Discovery |
+| `suggest_command` | Suggest commands (pass `working_directory` for git/Swift/Node-aware ideas) | Discovery |
 | `list_recent_commands` | View command history | Analytics |
 | `self_check` | System health diagnostics | Troubleshooting |
 
@@ -432,7 +433,7 @@ Pure subprocess, no AppleScript, no TCC layer, captures output cleanly, works on
 |------|-------------|----------|
 | `get_environment_context` | Probe git, venv, Node, Docker state | Context awareness |
 | `execute_and_parse` | Execute and parse output to structured JSON | Smart output |
-| `capture_environment` | Snapshot all environment variables | Before/after comparison |
+| `capture_environment` | Snapshot your real shell environment (sources your login profile) | Before/after comparison |
 | `diff_environment` | Compare two environment snapshots | Change detection |
 
 #### Workspace Profiles (v5.0)
@@ -765,7 +766,7 @@ If commands execute but aren't saved to the database:
               ┌─────────────────────────────────┐
               │   claude-command-runner v6.0    │
               │      (Swift, MCP server)        │
-              │      • 39 tools                 │
+              │      • 40 tools                 │
               └─────────┬─────────┬─────────────┘
                         │         │
               ┌─────────┘         └──────────────┐

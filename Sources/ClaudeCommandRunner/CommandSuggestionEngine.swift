@@ -190,10 +190,16 @@ class CommandSuggestionEngine {
         let patterns: [(String, (String) -> String?, String)] = [
             ("find.*file", { q in
                 if let match = q.range(of: "file[s]?\\s+(.+)", options: .regularExpression) {
-                    let filename = String(q[match])
+                    let raw = String(q[match])
                         .replacingOccurrences(of: "files ", with: "")
                         .replacingOccurrences(of: "file ", with: "")
-                    return "find . -name \"*\(filename)*\" -type f"
+                        .trimmingCharacters(in: .whitespaces)
+                    // Only emit a glob for a clean single token. A natural-language
+                    // query ("...files modified in the last day") would otherwise
+                    // produce a nonsense pattern full of spaces, so skip it and let
+                    // the contextual/history suggestions stand on their own.
+                    guard !raw.isEmpty, !raw.contains(" ") else { return nil }
+                    return "find . -name \"*\(raw)*\" -type f"
                 }
                 return nil
             }, "Find files matching pattern"),
@@ -273,10 +279,20 @@ func handleSuggestCommand(params: CallTool.Parameters, logger: Logger) async thr
     }
     
     let engine = CommandSuggestionEngine(logger: logger)
-    
-    // Create context from current environment
+
+    // Use the caller-provided working directory so the context-aware
+    // (git / Swift / Node) suggestions actually fire. The MCP server's own CWD
+    // is `/`, which would otherwise suppress every contextual suggestion.
+    let workingDirectory: String
+    if let dirValue = arguments["working_directory"],
+       case .string(let dir) = dirValue, !dir.isEmpty {
+        workingDirectory = (dir as NSString).expandingTildeInPath
+    } else {
+        workingDirectory = FileManager.default.currentDirectoryPath
+    }
+
     let context = CommandContext(
-        workingDirectory: FileManager.default.currentDirectoryPath,
+        workingDirectory: workingDirectory,
         recentCommands: DatabaseManager.shared.getRecentCommands(limit: 5).map { $0.command },
         environment: ProcessInfo.processInfo.environment
     )
