@@ -207,34 +207,28 @@ func handleExecutePipeline(params: CallTool.Parameters, logger: Logger, config: 
     return CallTool.Result(content: [.text(output)], isError: !overallSuccess)
 }
 
+/// Maximum wall-clock time for a single pipeline step. Previously there was
+/// no timeout at all, so one hung step hung the whole tool call forever.
+private let pipelineStepTimeout: TimeInterval = 600
+
 /// Execute a command directly and return result (internal helper)
 private func executeCommandDirect(command: String, workingDirectory: String?, logger: Logger) async -> (output: String, error: String, exitCode: Int32) {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/bin/bash")
-    process.arguments = ["-c", command]
-    
-    if let workDir = workingDirectory {
-        process.currentDirectoryURL = URL(fileURLWithPath: workDir)
-    }
-    
-    let outputPipe = Pipe()
-    let errorPipe = Pipe()
-    process.standardOutput = outputPipe
-    process.standardError = errorPipe
-    
     do {
-        try process.run()
-        process.waitUntilExit()
-        
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-        
-        let output = String(data: outputData, encoding: .utf8) ?? ""
-        let error = String(data: errorData, encoding: .utf8) ?? ""
-        
-        return (output.trimmingCharacters(in: .whitespacesAndNewlines),
-                error.trimmingCharacters(in: .whitespacesAndNewlines),
-                process.terminationStatus)
+        let result = try await runProcess(
+            executablePath: "/bin/bash",
+            arguments: ["-c", command],
+            currentDirectory: workingDirectory,
+            timeout: pipelineStepTimeout
+        )
+        if result.timedOut {
+            logger.warning("Pipeline step timed out after \(Int(pipelineStepTimeout))s: \(command)")
+            return (result.stdout.trimmingCharacters(in: .whitespacesAndNewlines),
+                    "Step timed out after \(Int(pipelineStepTimeout))s and was terminated",
+                    result.exitCode)
+        }
+        return (result.stdout.trimmingCharacters(in: .whitespacesAndNewlines),
+                result.stderr.trimmingCharacters(in: .whitespacesAndNewlines),
+                result.exitCode)
     } catch {
         logger.error("Failed to execute command: \(error)")
         return ("", error.localizedDescription, -1)
@@ -322,21 +316,11 @@ func handleExecuteWithStreaming(params: CallTool.Parameters, logger: Logger, con
         workingDirectory = dirString
     }
     
-    // Get update interval (default 2 seconds)
-    var updateInterval: Int = 2
-    if let interval = arguments["update_interval"],
-       case .string(let intervalStr) = interval,
-       let intervalInt = Int(intervalStr) {
-        updateInterval = intervalInt
-    }
-    
-    // Get max duration (default 120 seconds)
-    var maxDuration: Int = 120
-    if let maxDur = arguments["max_duration"],
-       case .string(let maxDurStr) = maxDur,
-       let maxDurInt = Int(maxDurStr) {
-        maxDuration = maxDurInt
-    }
+    // Get update interval (default 2 seconds) — accepts JSON numbers and strings
+    let updateInterval: Int = intArgument(arguments["update_interval"]) ?? 2
+
+    // Get max duration (default 120 seconds) — accepts JSON numbers and strings
+    let maxDuration: Int = intArgument(arguments["max_duration"]) ?? 120
     
     logger.info("Starting streaming execution: \(commandString)")
     logger.info("Update interval: \(updateInterval)s, Max duration: \(maxDuration)s")
@@ -349,7 +333,7 @@ func handleExecuteWithStreaming(params: CallTool.Parameters, logger: Logger, con
     // Build command that writes to file continuously
     var fullCommand = commandString
     if let workDir = workingDirectory {
-        fullCommand = "cd \"\(workDir)\" && \(commandString)"
+        fullCommand = "cd \"\(escapeForDoubleQuotedShell(workDir))\" && \(commandString)"
     }
     
     // Wrap command to capture output progressively

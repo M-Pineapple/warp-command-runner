@@ -184,8 +184,11 @@ func getTimeoutMessage(for type: CommandType, totalWaitTime: Int, commandId: Str
     }
 }
 
-// Helper to extract command ID (reuse from stable version)
-private func extractCommandId(from text: String) -> String? {
+// Helper to extract command ID from execute_command's display output.
+// Internal (not private) so tests can pin this contract: the regex couples
+// auto-retrieve to the exact wording "Command ID: <uuid>" — if that wording
+// changes, auto-retrieve silently breaks.
+func extractCommandId(from text: String) -> String? {
     let pattern = "Command ID: ([A-F0-9\\-]+)"
     if let regex = try? NSRegularExpression(pattern: pattern),
        let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) {

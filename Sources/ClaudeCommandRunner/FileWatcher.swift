@@ -130,6 +130,12 @@ actor FileWatcher {
     /// Remove a watch by ID
     func removeWatch(id: String) -> Bool {
         guard let watch = activeWatches[id] else { return false }
+        // A suspended DispatchSource must be resumed before cancel/release —
+        // cancelling while suspended is a libdispatch client error (crash on
+        // release) and the cancel handler that closes the fd never runs.
+        if !watch.rule.isActive {
+            watch.source.resume()
+        }
         watch.source.cancel()
         activeWatches.removeValue(forKey: id)
         rules.removeValue(forKey: id)
@@ -140,6 +146,8 @@ actor FileWatcher {
     /// Pause a watch without removing it
     func pauseWatch(id: String) -> Bool {
         guard let watch = activeWatches[id] else { return false }
+        // Suspending twice would unbalance the suspend count.
+        guard watch.rule.isActive else { return true }
         watch.source.suspend()
         var rule = watch.rule
         rule.isActive = false
@@ -151,6 +159,8 @@ actor FileWatcher {
     /// Resume a paused watch
     func resumeWatch(id: String) -> Bool {
         guard let watch = activeWatches[id] else { return false }
+        // Resuming an already-active source crashes (unbalanced resume).
+        guard !watch.rule.isActive else { return true }
         watch.source.resume()
         var rule = watch.rule
         rule.isActive = true
@@ -167,6 +177,9 @@ actor FileWatcher {
     /// Remove all watches
     func removeAll() {
         for (_, watch) in activeWatches {
+            if !watch.rule.isActive {
+                watch.source.resume()
+            }
             watch.source.cancel()
         }
         activeWatches.removeAll()
@@ -176,6 +189,11 @@ actor FileWatcher {
 
     // MARK: - Internal
 
+    /// Maximum wall-clock time for a watch command. Previously the command ran
+    /// with no timeout while blocking the actor, so one hung command froze all
+    /// file-watch tools.
+    private static let watchCommandTimeout: TimeInterval = 300
+
     private func handleFileChange(
         ruleId: String,
         command: String,
@@ -183,7 +201,7 @@ actor FileWatcher {
         debounceSeconds: Double,
         extensions: [String]?,
         watchPath: String
-    ) {
+    ) async {
         // Debounce — skip if triggered too recently
         if let lastTriggered = activeWatches[ruleId]?.lastTriggered {
             let elapsed = Date().timeIntervalSince(lastTriggered)
@@ -218,27 +236,24 @@ actor FileWatcher {
 
         logger.info("FileWatcher: Change detected in '\(watchPath)' — executing: \(command)")
 
-        // Execute the command
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-c", command]
-
-        if let workDir = workingDirectory {
-            process.currentDirectoryURL = URL(fileURLWithPath: workDir)
-        }
-
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
-
+        // Execute the command via the shared runner: pipes drained concurrently,
+        // bounded by a timeout, and the actor is only suspended (not blocked)
+        // while the command runs, so other watch tools stay responsive.
         do {
-            try process.run()
-            process.waitUntilExit()
+            let result = try await runProcess(
+                executablePath: "/bin/bash",
+                arguments: ["-c", command],
+                currentDirectory: workingDirectory,
+                timeout: Self.watchCommandTimeout
+            )
 
-            let output = String(data: outputPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            let error = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-            let exitCode = process.terminationStatus
+            let output = result.stdout
+            let error = result.stderr
+            let exitCode = result.exitCode
+
+            if result.timedOut {
+                logger.warning("FileWatcher: Command timed out after \(Int(Self.watchCommandTimeout))s and was terminated")
+            }
 
             if exitCode == 0 {
                 logger.info("FileWatcher: Command succeeded (exit 0)")

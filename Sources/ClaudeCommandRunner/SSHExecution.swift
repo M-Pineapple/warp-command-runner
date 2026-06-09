@@ -105,21 +105,8 @@ actor SSHProfileStore {
     }
 
     // MARK: Persistence
-
-    private func loadFromDisk() {
-        guard FileManager.default.fileExists(atPath: profilesURL.path) else { return }
-        do {
-            let data = try Data(contentsOf: profilesURL)
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let loaded = try decoder.decode([SSHProfile].self, from: data)
-            for p in loaded {
-                profiles[p.id] = p
-            }
-        } catch {
-            // Silently start fresh if file is corrupt
-        }
-    }
+    // (the old private loadFromDisk() duplicated the inline load in init
+    // verbatim and had no callers — removed)
 
     private func persistToDisk() {
         do {
@@ -131,7 +118,10 @@ actor SSHProfileStore {
             let data = try encoder.encode(Array(profiles.values))
             try data.write(to: profilesURL)
         } catch {
-            // Best-effort persistence
+            // Best-effort persistence, but never silent: a failed write means
+            // profile changes are lost on restart.
+            Logger(label: "com.claude.command-runner.ssh")
+                .error("Failed to persist SSH profiles to \(profilesURL.path): \(error)")
         }
     }
 }
@@ -184,25 +174,27 @@ func executeSSHCommand(
 
     logger.info("SSH: Executing on \(username)@\(host):\(port) — \(command)")
 
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
-    process.arguments = args
+    // The `timeout` parameter is the connection timeout (ConnectTimeout above).
+    // Separately cap total execution: previously a remote command that hung
+    // after connecting ran unbounded with no way to cancel the handler.
+    let executionTimeout: TimeInterval = 600
 
-    let outPipe = Pipe()
-    let errPipe = Pipe()
-    process.standardOutput = outPipe
-    process.standardError = errPipe
+    let result = try await runProcess(
+        executablePath: "/usr/bin/ssh",
+        arguments: args,
+        timeout: executionTimeout
+    )
 
-    try process.run()
-    process.waitUntilExit()
+    if result.timedOut {
+        logger.warning("SSH: Remote command timed out after \(Int(executionTimeout))s and was terminated")
+        return (result.stdout,
+                result.stderr + "\n[Remote command timed out after \(Int(executionTimeout))s and was terminated]",
+                result.exitCode)
+    }
 
-    let stdout = String(data: outPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-    let stderr = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-    let exitCode = process.terminationStatus
+    logger.info("SSH: Completed with exit code \(result.exitCode)")
 
-    logger.info("SSH: Completed with exit code \(exitCode)")
-
-    return (stdout, stderr, exitCode)
+    return (result.stdout, result.stderr, result.exitCode)
 }
 
 // MARK: - Errors
@@ -257,12 +249,14 @@ func handleSSHExecute(params: CallTool.Parameters, logger: Logger, config: Confi
         await SSHProfileStore.shared.markUsed(id: profile.id)
     }
 
-    // Direct parameters override profile values
+    // Direct parameters override profile values.
+    // port/timeout accept JSON numbers as declared in the schema (the old
+    // string-only parsing silently ignored numeric values).
     if let v = arguments["host"], case .string(let s) = v { host = s }
     if let v = arguments["username"], case .string(let s) = v { username = s }
-    if let v = arguments["port"], case .string(let s) = v, let p = Int(s) { port = p }
+    if let p = intArgument(arguments["port"]) { port = p }
     if let v = arguments["identity_file"], case .string(let s) = v { identityFile = s }
-    if let v = arguments["timeout"], case .string(let s) = v, let t = Int(s) { timeout = t }
+    if let t = intArgument(arguments["timeout"]) { timeout = t }
 
     guard let finalHost = host else {
         return CallTool.Result(content: [.text("❌ Missing required parameter: 'host' (or use 'profile')")], isError: true)

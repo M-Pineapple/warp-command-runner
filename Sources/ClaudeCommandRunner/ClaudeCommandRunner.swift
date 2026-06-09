@@ -34,21 +34,27 @@ let commandResultsStore = CommandResultsStore()
 
 @main
 struct ClaudeCommandRunner: AsyncParsableCommand {
+    /// Single source of truth for the version — previously "6.1.0", "v2.0"
+    /// and "Version 2.0" coexisted across the server init, logs and help text.
+    static let version = "6.1.0"
+
     static let configuration = CommandConfiguration(
         commandName: "claude-command-runner",
         abstract: "MCP server bridging Claude Desktop and Warp Terminal",
         discussion: """
             Claude Command Runner acts as a bridge between Claude Desktop and Warp Terminal,
-            enabling Claude to suggest terminal commands that can be executed seamlessly 
+            enabling Claude to suggest terminal commands that can be executed seamlessly
             within Warp's Agent Mode.
-            
-            Version 2.0: Now with two-way communication support!
-            """
+
+            Version \(version)
+            """,
+        version: version
     )
-    
-    @Option(name: [.customLong("port"), .customShort("p")], help: "Port for the command receiver (default: 9876)")
-    var port: Int = 9876
-    
+
+    // NOTE: the old --port/-p option was removed: the TCP listener it
+    // configured was retired in v6.0 (stdio + Unix socket only), so the
+    // option configured nothing.
+
     @Option(name: [.customLong("log-level"), .customShort("l")], help: "Log level: debug, info, warning, error")
     var logLevel: String = "info"
     
@@ -109,21 +115,16 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
             return
         }
         
-        // Override with command line arguments if provided
-        let actualPort = port != 9876 ? port : config.port
-        let _ = logLevel != "info" ? logLevel : config.logging.level
-        
         if verbose {
-            logger.info("Starting Claude Command Runner MCP Server v2.0...")
-            logger.info("Port: \(actualPort)")
+            logger.info("Starting Claude Command Runner MCP Server v\(Self.version)...")
             logger.info("Two-way communication: ENABLED")
             logger.info("Configuration loaded from: \(ConfigurationManager.configDirectoryPath)")
         }
-        
+
         // Create the MCP server
         let server = Server(
             name: "Claude Command Runner",
-            version: "6.1.0",
+            version: Self.version,
             capabilities: .init(
                 tools: .init(listChanged: false)
             )
@@ -571,6 +572,10 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
                             "working_directory": .object([
                                 "type": .string("string"),
                                 "description": .string("Optional initial working directory")
+                            ]),
+                            "terminal": .object([
+                                "type": .string("string"),
+                                "description": .string("Optional terminal to use (e.g. Warp, iTerm2, Terminal, Alacritty); defaults to the configured/preferred terminal")
                             ])
                         ]),
                         "required": .array([.string("name")])
@@ -972,21 +977,11 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
             logger.info("Shell shim socket active at \(shellShimSocketPath())")
         }
         
-        // Add error handling for port conflicts
         do {
             // Run the service group
             try await serviceGroup.run()
         } catch {
             logger.error("Service group error: \(error)")
-            
-            // Check if it's a port binding error
-            if let error = error as? NIOCore.IOError, error.errnoCode == EADDRINUSE {
-                logger.error("Port \(actualPort) is already in use. Please stop any existing instances or use a different port.")
-                print("\n❌ Error: Port \(actualPort) is already in use.")
-                print("Try: lsof -i :\(actualPort) to find the process using this port")
-                Foundation.exit(1)
-            }
-            
             throw error
         }
     }
@@ -1155,52 +1150,3 @@ func handleGetCommandOutput(params: CallTool.Parameters, logger: Logger) async -
 }
 
 // createOutputCaptureScript and createAppleScript are now in TerminalUtilities.swift
-
-// Function to wait for and retrieve command output
-func waitForCommandOutput(commandId: String, timeout: TimeInterval = 30, logger: Logger) async throws -> CommandExecutionResult? {
-    let outputFile = "/tmp/claude_output_\(commandId).json"
-    let markerFile = "\(outputFile).complete"
-    
-    let startTime = Date()
-    
-    // Poll for completion
-    while Date().timeIntervalSince(startTime) < timeout {
-        if FileManager.default.fileExists(atPath: markerFile) {
-            // Small delay to ensure file is fully written
-            try await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
-            
-            // Read the output file
-            do {
-                let data = try Data(contentsOf: URL(fileURLWithPath: outputFile))
-                
-                // Configure decoder with proper date format
-                let decoder = JSONDecoder()
-                decoder.dateDecodingStrategy = .iso8601
-                
-                let result = try decoder.decode(CommandExecutionResult.self, from: data)
-                
-                logger.info("Successfully decoded command output for \(commandId)")
-                
-                // Clean up files
-                try? FileManager.default.removeItem(atPath: outputFile)
-                try? FileManager.default.removeItem(atPath: markerFile)
-                
-                return result
-            } catch {
-                logger.error("Failed to decode command output: \(error)")
-                // Try to read the raw content for debugging
-                if let rawContent = try? String(contentsOf: URL(fileURLWithPath: outputFile)) {
-                    logger.error("Raw JSON content: \(rawContent)")
-                }
-                // Don't remove files on error so we can debug
-                return nil
-            }
-        }
-        
-        // Wait a bit before checking again
-        try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-    }
-    
-    logger.info("Timeout reached waiting for command output")
-    return nil
-}

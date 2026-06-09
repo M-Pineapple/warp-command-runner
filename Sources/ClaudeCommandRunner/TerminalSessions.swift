@@ -155,8 +155,7 @@ private func newTabAppleScript(for terminal: TerminalConfig.TerminalType) -> Str
 
 /// Generate AppleScript to send a command to a specific tab in iTerm2
 private func iterm2SendToTab(tabIndex: Int, command: String) -> String {
-    let escapedCommand = command.replacingOccurrences(of: "\\", with: "\\\\")
-                                .replacingOccurrences(of: "\"", with: "\\\"")
+    let escapedCommand = escapeForAppleScript(command)
     return """
     tell application "iTerm"
         activate
@@ -174,8 +173,7 @@ private func iterm2SendToTab(tabIndex: Int, command: String) -> String {
 
 /// Generate AppleScript to send a command to a specific tab in Terminal.app
 private func terminalSendToTab(tabIndex: Int, command: String) -> String {
-    let escapedCommand = command.replacingOccurrences(of: "\\", with: "\\\\")
-                                .replacingOccurrences(of: "\"", with: "\\\"")
+    let escapedCommand = escapeForAppleScript(command)
     return """
     tell application "Terminal"
         activate
@@ -192,8 +190,7 @@ private func terminalSendToTab(tabIndex: Int, command: String) -> String {
 /// Generate AppleScript to send command to the CURRENT active tab (Warp/Alacritty — no native tab targeting)
 /// Used by send_to_session to reuse existing tabs instead of opening new ones.
 private func keystrokeSendToCurrentTab(terminal: TerminalConfig.TerminalType, command: String) -> String {
-    let escapedCommand = command.replacingOccurrences(of: "\\", with: "\\\\")
-                                .replacingOccurrences(of: "\"", with: "\\\"")
+    let escapedCommand = escapeForAppleScript(command)
     return """
     tell application "\(terminal.rawValue)" to activate
     delay 0.3
@@ -255,30 +252,26 @@ private func closeTabAppleScript(for terminal: TerminalConfig.TerminalType) -> S
 // MARK: - AppleScript Execution Helper
 
 @discardableResult
-private func executeAppleScript(_ script: String, logger: Logger) -> (success: Bool, output: String) {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-    process.arguments = ["-e", script]
-
-    let outputPipe = Pipe()
-    let errorPipe = Pipe()
-    process.standardOutput = outputPipe
-    process.standardError = errorPipe
-
+private func executeAppleScript(_ script: String, logger: Logger) async -> (success: Bool, output: String) {
     do {
-        try process.run()
-        process.waitUntilExit()
+        // Scripts embed delays of up to ~1s; 30s comfortably bounds a hung
+        // osascript (e.g. waiting on an Automation permission prompt).
+        let result = try await runProcess(
+            executablePath: "/usr/bin/osascript",
+            arguments: ["-e", script],
+            timeout: 30
+        )
 
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: outputData, encoding: .utf8) ?? ""
-        let error = String(data: errorData, encoding: .utf8) ?? ""
+        if result.timedOut {
+            logger.warning("AppleScript timed out after 30s and was terminated")
+            return (false, "AppleScript timed out after 30s")
+        }
 
-        if process.terminationStatus == 0 {
-            return (true, output.trimmingCharacters(in: .whitespacesAndNewlines))
+        if result.exitCode == 0 {
+            return (true, result.stdout.trimmingCharacters(in: .whitespacesAndNewlines))
         } else {
-            logger.warning("AppleScript failed: \(error)")
-            return (false, error.trimmingCharacters(in: .whitespacesAndNewlines))
+            logger.warning("AppleScript failed: \(result.stderr)")
+            return (false, result.stderr.trimmingCharacters(in: .whitespacesAndNewlines))
         }
     } catch {
         logger.error("Failed to execute AppleScript: \(error)")
@@ -321,9 +314,14 @@ func handleOpenTerminalTab(params: CallTool.Parameters, logger: Logger) async ->
 
     // Pull optional directory once — used by both the deeplink path (Warp)
     // and the AppleScript+keystroke path (other terminals).
+    // The schema declares `working_directory`; the handler previously read
+    // only `directory`, so the documented parameter was silently ignored.
+    // Accept both for compatibility.
     let directory: String? = {
-        if let dirArg = arguments["directory"], case .string(let s) = dirArg {
-            return s.isEmpty ? nil : s
+        for key in ["working_directory", "directory"] {
+            if let dirArg = arguments[key], case .string(let s) = dirArg, !s.isEmpty {
+                return s
+            }
         }
         return nil
     }()
@@ -345,7 +343,7 @@ func handleOpenTerminalTab(params: CallTool.Parameters, logger: Logger) async ->
         try? await Task.sleep(nanoseconds: 300_000_000)
     } else {
         let script = newTabAppleScript(for: terminal)
-        let result = executeAppleScript(script, logger: logger)
+        let result = await executeAppleScript(script, logger: logger)
         guard result.success else {
             return CallTool.Result(
                 content: [.text("❌ Failed to open new tab in \(terminal.rawValue): \(result.output)")],
@@ -353,8 +351,8 @@ func handleOpenTerminalTab(params: CallTool.Parameters, logger: Logger) async ->
             )
         }
         if let dir = directory {
-            let cdScript = keystrokeSendToCurrentTab(terminal: terminal, command: "cd \"\(dir)\"")
-            executeAppleScript(cdScript, logger: logger)
+            let cdScript = keystrokeSendToCurrentTab(terminal: terminal, command: "cd \"\(escapeForDoubleQuotedShell(dir))\"")
+            await executeAppleScript(cdScript, logger: logger)
             try? await Task.sleep(nanoseconds: 500_000_000)
         }
     }
@@ -440,7 +438,7 @@ func handleSendToSession(params: CallTool.Parameters, logger: Logger) async -> C
         script = keystrokeSendToCurrentTab(terminal: terminal, command: command)
     }
 
-    let result = executeAppleScript(script, logger: logger)
+    let result = await executeAppleScript(script, logger: logger)
 
     guard result.success else {
         return CallTool.Result(
@@ -524,7 +522,7 @@ func handleCloseSession(params: CallTool.Parameters, logger: Logger) async -> Ca
     if closeTab, let terminal = TerminalConfig.TerminalType(rawValue: session.terminal) {
         logger.info("Closing terminal tab for session: \(name)")
         let script = closeTabAppleScript(for: terminal)
-        executeAppleScript(script, logger: logger)
+        await executeAppleScript(script, logger: logger)
     }
 
     return CallTool.Result(
@@ -539,13 +537,21 @@ func handleCloseSession(params: CallTool.Parameters, logger: Logger) async -> Ca
 
 /// Handle cleanup_sessions tool — remove stale sessions and optionally close their tabs
 func handleCleanupSessions(params: CallTool.Parameters, logger: Logger) async -> CallTool.Result {
-    // Default: 30 minutes of inactivity = stale
+    // Default: 30 minutes of inactivity = stale.
+    // Accept JSON numbers as well as strings — the schema declares an integer,
+    // and the old string-only parsing silently ignored numeric values.
     var staleMinutes: Double = 30
-    if let arguments = params.arguments,
-       let minutesValue = arguments["inactive_minutes"],
-       case .string(let minsStr) = minutesValue,
-       let mins = Double(minsStr) {
-        staleMinutes = mins
+    if let arguments = params.arguments, let minutesValue = arguments["inactive_minutes"] {
+        switch minutesValue {
+        case .string(let s):
+            if let mins = Double(s) { staleMinutes = mins }
+        case .int(let i):
+            staleMinutes = Double(i)
+        case .double(let d):
+            staleMinutes = d
+        default:
+            break
+        }
     }
 
     var closeTabs = true
@@ -573,7 +579,7 @@ func handleCleanupSessions(params: CallTool.Parameters, logger: Logger) async ->
         for session in removed {
             if let terminal = TerminalConfig.TerminalType(rawValue: session.terminal) {
                 let script = closeTabAppleScript(for: terminal)
-                executeAppleScript(script, logger: logger)
+                await executeAppleScript(script, logger: logger)
                 // Brief delay between tab closes to avoid AppleScript race conditions
                 try? await Task.sleep(nanoseconds: 300_000_000)
             }

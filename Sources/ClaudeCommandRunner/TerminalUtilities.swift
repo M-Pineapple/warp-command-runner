@@ -2,8 +2,36 @@ import Foundation
 
 /// Shared terminal utilities
 
+// MARK: - Escaping helpers
+
+/// Escape a string for interpolation inside an AppleScript double-quoted
+/// string literal. Previously each file rolled its own (or skipped it
+/// entirely) — this is the single shared implementation.
+func escapeForAppleScript(_ string: String) -> String {
+    return string
+        .replacingOccurrences(of: "\\", with: "\\\\")
+        .replacingOccurrences(of: "\"", with: "\\\"")
+}
+
+/// Escape a string for interpolation inside a double-quoted POSIX shell
+/// string (e.g. `cd "<here>"`). Neutralises quote-breakout, command
+/// substitution and variable expansion. Used for user-supplied paths like
+/// working_directory, which previously went into `cd "…"` unescaped and
+/// could break out of the quotes (bypassing the command blocklist).
+func escapeForDoubleQuotedShell(_ string: String) -> String {
+    return string
+        .replacingOccurrences(of: "\\", with: "\\\\")
+        .replacingOccurrences(of: "\"", with: "\\\"")
+        .replacingOccurrences(of: "$", with: "\\$")
+        .replacingOccurrences(of: "`", with: "\\`")
+}
+
 /// Create AppleScript for different terminal types
 func createAppleScript(for terminal: TerminalConfig.TerminalType, command: String) -> String {
+    // All current callers pass internally-generated commands
+    // ("bash /tmp/claude_script_<uuid>.sh"), but escape regardless so a
+    // future caller passing arbitrary text can't break the script.
+    let escaped = escapeForAppleScript(command)
     switch terminal {
     case .warp, .warpPreview:
         // Reuse the current active tab — only open_terminal_tab should create new tabs
@@ -11,7 +39,7 @@ func createAppleScript(for terminal: TerminalConfig.TerminalType, command: Strin
         tell application "\(terminal.rawValue)" to activate
         delay 0.3
         tell application "System Events"
-            keystroke "\(command)"
+            keystroke "\(escaped)"
             delay 0.2
             keystroke return
         end tell
@@ -34,7 +62,7 @@ func createAppleScript(for terminal: TerminalConfig.TerminalType, command: Strin
 
             tell current window
                 tell current session
-                    write text "\(command)"
+                    write text "\(escaped)"
                 end tell
             end tell
         end tell
@@ -47,7 +75,7 @@ func createAppleScript(for terminal: TerminalConfig.TerminalType, command: Strin
             activate
 
             if (count of windows) = 0 then
-                do script "\(command)"
+                do script "\(escaped)"
             else
                 -- Open new tab in frontmost window
                 tell application "System Events"
@@ -56,7 +84,7 @@ func createAppleScript(for terminal: TerminalConfig.TerminalType, command: Strin
                     end tell
                 end tell
                 delay 0.5
-                do script "\(command)" in front window
+                do script "\(escaped)" in front window
             end if
         end tell
         """
@@ -67,7 +95,7 @@ func createAppleScript(for terminal: TerminalConfig.TerminalType, command: Strin
         tell application "Alacritty" to activate
         delay 1.0
         tell application "System Events"
-            keystroke "\(command)"
+            keystroke "\(escaped)"
             delay 0.2
             keystroke return
         end tell

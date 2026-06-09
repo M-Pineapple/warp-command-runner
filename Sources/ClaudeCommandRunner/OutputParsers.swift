@@ -34,27 +34,21 @@ func handleExecuteAndParse(params: CallTool.Parameters, logger: Logger, config: 
     // Execute command directly (captures output in-process)
     var fullCommand = commandString
     if let dir = workingDirectory {
-        fullCommand = "cd \"\(dir)\" && \(commandString)"
+        fullCommand = "cd \"\(escapeForDoubleQuotedShell(dir))\" && \(commandString)"
     }
 
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/bin/bash")
-    process.arguments = ["-c", fullCommand]
-
-    let outputPipe = Pipe()
-    let errorPipe = Pipe()
-    process.standardOutput = outputPipe
-    process.standardError = errorPipe
-
     do {
-        try process.run()
-        process.waitUntilExit()
+        let result = try await runProcess(
+            executablePath: "/bin/bash",
+            arguments: ["-c", fullCommand],
+            timeout: 600
+        )
 
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-        let stdout = String(data: outputData, encoding: .utf8) ?? ""
-        let stderr = String(data: errorData, encoding: .utf8) ?? ""
-        let exitCode = process.terminationStatus
+        let stdout = result.stdout
+        let stderr = result.timedOut
+            ? result.stderr + "\n[Command timed out after 600s and was terminated]"
+            : result.stderr
+        let exitCode = result.exitCode
 
         // Detect command type and apply parser
         let parsed = applyParser(command: commandString, stdout: stdout, stderr: stderr, exitCode: exitCode, logger: logger)

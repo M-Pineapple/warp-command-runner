@@ -18,21 +18,13 @@ func handleGetEnvironmentContext(params: CallTool.Parameters, logger: Logger, co
     logger.info("Probing environment context...")
 
     // Execute the probe script directly (no terminal needed)
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/bin/bash")
-    process.arguments = ["-c", probeScript]
-
-    let outputPipe = Pipe()
-    let errorPipe = Pipe()
-    process.standardOutput = outputPipe
-    process.standardError = errorPipe
-
     do {
-        try process.run()
-        process.waitUntilExit()
-
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: outputData, encoding: .utf8) ?? ""
+        let result = try await runProcess(
+            executablePath: "/bin/bash",
+            arguments: ["-c", probeScript],
+            timeout: 60
+        )
+        let output = result.stdout
 
         let context = parseEnvironmentOutput(output, logger: logger)
 
@@ -57,7 +49,7 @@ private func buildEnvironmentProbeScript(workingDirectory: String?) -> String {
     var script = "#!/bin/bash\n"
 
     if let dir = workingDirectory {
-        script += "cd \"\(dir)\" 2>/dev/null || true\n"
+        script += "cd \"\(escapeForDoubleQuotedShell(dir))\" 2>/dev/null || true\n"
     }
 
     script += """
