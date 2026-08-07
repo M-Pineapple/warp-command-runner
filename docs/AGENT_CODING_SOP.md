@@ -83,6 +83,14 @@ absence caused a production incident.
 - Agents touching live data stores run read-only, always.
 - External cross-review (a different model family auditing the same code) at
   milestones — it reliably catches what the in-family review normalizes.
+- **Admin auth to any app or tool is FORBIDDEN without asking first.** Do not
+  authorize, approve, click through, paste a device code, complete browserless
+  OAuth, grant CLI login scopes, issue API tokens, or otherwise give **admin**
+  (or equivalent high-privilege) access to Railway, GitHub, cloud consoles, MCP
+  hosts, or any other third-party app/tool — even when opened only for deploy
+  convenience. **STOP, ask the operator, and wait** for an explicit **Yes**,
+  **No**, or other answer. Silence is not consent; "for later" is the same
+  violation. (Forged 2026-08-07 — Railway CLI admin-scope close call.)
 
 ## 5. Ship ceremony (in order, none skippable)
 
