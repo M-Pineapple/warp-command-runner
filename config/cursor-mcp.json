@@ -1,8 +1,8 @@
 {
-  "_comment": "Cursor — ~/.cursor/mcp.json (or project .cursor/mcp.json). Cursor already has a terminal; register this only if you want commands typed into Warp.",
+  "_comment": "Cursor (~/.cursor/mcp.json). Cursor splits `command` on spaces, so /Applications/Warp Command Runner.app/... fails with spawn /Applications/Warp ENOENT. That is a Cursor host bug — do not rename the .app. Warp and Claude Desktop should keep the official /Applications path. For Cursor: run helper/install-cursor-wrapper.sh, then set command to ~/.local/bin/warp-command-runner (expand YOURUSER). Cursor already has a terminal; register this only if you want commands typed into Warp.",
   "mcpServers": {
     "warp-command-runner": {
-      "command": "/Applications/Warp Command Runner.app/Contents/MacOS/warp-command-runner",
+      "command": "/Users/YOURUSER/.local/bin/warp-command-runner",
       "args": []
     }
   }

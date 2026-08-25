@@ -5,6 +5,12 @@ All notable changes to Warp Command Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Docs
+
+- Cursor splits MCP `command` on spaces, so `/Applications/Warp Command Runner.app/...` fails with `spawn /Applications/Warp ENOENT`. Documented in [`config/cursor-mcp.json`](config/cursor-mcp.json); `helper/install-cursor-wrapper.sh` installs a no-space shim at `~/.local/bin/warp-command-runner`. Warp and Claude Desktop keep the official bundle path. Do not rename the `.app`.
+
 ## [7.0.0] - 2026-08-25 — Warp Command Runner rebrand
 
 Formerly **Claude Command Runner**. Same MCP server; names and docs match how the protocol actually works.

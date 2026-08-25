@@ -577,6 +577,9 @@ SSH profiles are stored at `~/.warp-command-runner/ssh_profiles.json`.
 ### Q: What's new in v7.0.0?
 **A:** Rebrand from Claude Command Runner to Warp Command Runner. Same 40 tools and stdio MCP protocol; names, bundle ID, and `~/.warp-command-runner` paths updated. v6 config is copied on first launch.
 
+### Q: Cursor says `spawn /Applications/Warp ENOENT`?
+**A:** Cursor splits `command` on spaces. The official path `/Applications/Warp Command Runner.app/...` is correct for Warp and Claude Desktop — do not rename the `.app`. For Cursor, run `helper/install-cursor-wrapper.sh` and point `~/.cursor/mcp.json` at `~/.local/bin/warp-command-runner`. See [`config/cursor-mcp.json`](config/cursor-mcp.json).
+
 ### Q: What's new in v6.0.0?
 **A:** Re-pivot to Warp after Warp went open source. Dual-consumer architecture (register the same binary in `~/.warp/.mcp.json` to use it from Warp's native agent panel, in addition to Claude Desktop). `warp://` deeplinks replace AppleScript menu-clicking for tab/window operations. New OSC 777 emitter (`emit_warp_event`) surfaces structured events into Warp's UI. New optional shell shim emits clean preexec/command-finished events to the MCP. Workspace profiles can now also emit Warp-native launch configs. ~460 LOC of dead code removed. Tool count goes from a previously-undercounted 36 (the v5 README claimed 30) up to **39**. See [CHANGELOG.md](CHANGELOG.md) and [docs/WARP_AGENT.md](docs/WARP_AGENT.md) for the full story.
 
