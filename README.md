@@ -1,88 +1,71 @@
-# Claude Command Runner
+# Warp Command Runner
 
 <div align="center">
-  <img src="assets/icon.svg" width="256" alt="Claude Command Runner — terminal prompt, Warp glyph, Claude asterisk">
+  <img src="assets/icon.svg" width="256" alt="Warp Command Runner — terminal prompt and Warp glyph">
 </div>
 
-**Lets Claude actually use your terminal.** You ask, Claude types the command into your [Warp](https://app.warp.dev/referral/G9W3EY) tab, captures the output, and tells you what happened. It's a Model Context Protocol (MCP) server with 40 tools — command execution, project setups, file watching, SSH, clipboard, environment intelligence — and the same binary works from both Claude Desktop and Warp's built-in AI agent panel. macOS, Swift, open source.
+**Give any chat AI a real terminal.** You ask in Warp, Claude Desktop, ChatGPT desktop, or any other MCP host. The model types the command into your [Warp](https://app.warp.dev/referral/G9W3EY) tab, captures the output, and tells you what happened. Forty tools: command execution, project setups, file watching, SSH, clipboard, environment intelligence. macOS, Swift, open source.
 
-> Built for [Warp Terminal](https://app.warp.dev/referral/G9W3EY) (free, open source AGPL-3.0). The 5 most powerful tools route commands visibly into your active Warp tab — that's the magic of this MCP. If you don't use Warp yet, [grab it here](https://app.warp.dev/referral/G9W3EY) — it pairs with this MCP for what's probably the closest thing to "Claude with a real terminal" you can get right now.
+This is for people who **don't live in Cursor or Claude Code**. If you already chat with Grok, ChatGPT, Claude, or Gemini from a desktop app (especially Warp's agent panel), add this MCP and that chat can read your files and run commands on your machine.
 
-## 🚀 What's New in v6.0.0 — Warp re-pivot
+> Built for [Warp Terminal](https://app.warp.dev/referral/G9W3EY). The five most powerful tools route commands **visibly** into your active Warp tab. Register the same binary with as many MCP hosts as you want — the server speaks standard MCP over stdio and does not care which model is calling.
 
-**Triggered by Warp going open source** under AGPL-3.0 ([github.com/warpdotdev/warp](https://github.com/warpdotdev/warp)) in May 2026. v6.0 re-establishes Warp as the primary integration target and adds a new install path: **Warp's native agent panel**.
+**Can any cloud AI use this?** Any **local MCP host** can. A website (grok.com, chatgpt.com, claude.ai in the browser) cannot spawn a process on your Mac. Full matrix: [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
-- **Dual-consumer architecture**: register `claude-command-runner` in `~/.warp/.mcp.json` and Warp's built-in agent (which uses your configured LLM — Claude Sonnet, Opus, etc.) calls the same tools Claude Desktop calls. Same binary, same code, two consumers. See [`docs/WARP_AGENT.md`](docs/WARP_AGENT.md).
-- **Deeplinks replace AppleScript** for tab/window operations: `open_terminal_tab` now uses `warp://action/new_tab?path=...`. No menu-clicking, no Accessibility permission for the open path.
-- **OSC 777 emitter** (`emit_warp_event`): build `printf` invocations that surface structured events into Warp's notification UI. Schema reimplemented from upstream `event/v1.rs` (no vendoring).
-- **Workspace profiles → Warp launch configs**: `save_workspace_profile` accepts `include_warp_launch_config: true` to also write a YAML to `~/.warp/launch_configurations/`, making the profile appear in Warp's launch UI.
-- **Optional shell shim** (Tier E, opt-in): `helper/install-shim.sh` adds zsh/bash hooks that emit preexec/command_finished events to a per-uid Unix socket the MCP listens on. Auto-disables outside Warp panes. Observability surface in v6.0; auto-routing `execute_command` through it is deferred to v6.0.x.
-- **Cleanup**: ~460 LOC of dead code removed (obsolete Warp DB integration, orphan TCP listener, unreachable background monitor). Tool count corrected: README claimed 30, reality was 36, v6.0 ships 39.
-- **Reproducible build**: swift-sdk pinned to `0.10.x` with a deterministic `scripts/patch-swift-sdk.sh` so a fresh clone builds without manual patches.
+## What's new in v7.0.0 — rebrand
 
-> **Honest caveat:** the "Claude" replying in Warp's agent panel is *Warp's* agent (running whichever LLM you configure in Warp's AI settings), not your Claude Desktop instance. Both can call the MCP; they don't share conversations. v6.0 does not bridge them.
+Formerly **Claude Command Runner**. Same engine, host-agnostic name:
 
-## What's New in v5.0.0 (history)
+- Product, binary, bundle ID, and config dir renamed to Warp Command Runner (`warp-command-runner`, `~/.warp-command-runner`)
+- Existing `~/.claude-command-runner` data is copied on first launch (the old folder is left in place)
+- MCP `serverInfo` name is `Warp Command Runner` so every host lists it that way
+- Config snippets for Warp, Claude Desktop, ChatGPT desktop, Cursor, VS Code, and a generic stdio host
+- Honest compatibility doc: stdio MCP works everywhere a local host exists; it is **not** a remote/HTTPS MCP for browser chats
 
-**v5.0.0: 36 tools, up from 12.**
-
-- **Clipboard Bridge**: Read from and write to the macOS clipboard without leaving the conversation
-- **macOS Notifications**: Get native notifications when long-running commands finish
-- **Environment Intelligence**: Probe your terminal context (git branch, active venv, Node version, Docker containers) in one call
-- **Output Parsers**: Structured JSON parsing for `git status`, `docker ps`, test results, and more
-- **Environment Snapshots**: Capture and diff environment variables before/after installs or config changes
-- **Workspace Profiles**: Save and restore project contexts (directory, env vars, common commands) per project
-- **Multi-Terminal Sessions**: Open, name, and send commands to multiple terminal tabs
-- **Interactive Command Detection**: Smart detection of interactive commands (vim, ssh, python REPL) with graceful handling
-- **File System Watchers**: Watch directories for changes and trigger commands automatically
-- **SSH Remote Execution**: Run commands on remote hosts via SSH key authentication
-
-### Previous Releases (Included)
-
-- **v4.0**: Command pipelines, output streaming, reusable templates
-- **v3.0**: Smart auto-retrieve, SQLite history, configurable security
+v6.x history (Warp deeplinks, OSC 777, dual-consumer Warp Agent, 40 tools) is unchanged — see [CHANGELOG.md](CHANGELOG.md).
 
 ## Overview
 
-Claude Command Runner is a **dual-consumer MCP server** — the same binary serves Claude Desktop **and** Warp's native agent panel. It enables an LLM (whichever you've configured in either client) to:
+Warp Command Runner is an **MCP server**. One binary, any MCP client:
 
-- Execute terminal commands directly from conversations
-- Chain commands with conditional logic using pipelines
-- Stream output in real-time for long builds
+- Execute terminal commands from a conversation
+- Chain commands with pipelines and failure modes
+- Stream output for long builds
 - Save and reuse command templates with variables
-- Automatically capture output with intelligent timing
-- Track command history and patterns
+- Auto-capture output with intelligent timing
+- Track command history
 - Read/write the macOS clipboard
 - Probe environment context (git, venv, Docker, Node)
 - Parse command output into structured JSON
-- Manage workspace profiles per project (with optional emission as Warp launch configs)
-- Open terminal tabs (via `warp://` deeplinks; AppleScript fallback for non-Warp terminals) and send commands to the active tab
+- Manage workspace profiles (optionally as Warp launch configs)
+- Open Warp tabs via `warp://` deeplinks and send commands to the active tab
 - Watch files and trigger commands on changes
 - Execute commands on remote hosts via SSH
-- **(v6.0)** Surface tool-execution status to Warp's UI as OSC 777 `warp://cli-agent` events
-- **(v6.0, opt-in)** Stream clean preexec / command-finished events from your shell to the MCP via a per-uid Unix domain socket
+- Surface status into Warp as OSC 777 `warp://cli-agent` events
+- Optional shell shim: preexec / command-finished events over a Unix socket
 
-## 🧭 Which Claude product does this work with?
+## 🧭 Which app should I register this with?
 
-`claude-command-runner` is an MCP server, so any Anthropic surface that consumes MCP servers can call its 40 tools — but the **value-add varies sharply by consumer**, and you should pick deliberately.
+The protocol is MCP. The **value** depends on whether the host is local and whether Warp is your terminal. Details in [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
-| Consumer | Where to register | Value-add | Recommended? |
-|---|---|---|---|
-| **Claude Desktop** | `~/Library/Application Support/Claude/claude_desktop_config.json` | **High.** `execute_command` types into your Warp tab so terminal action is *visible* alongside the chat. Chat stays focused on reasoning; the terminal becomes the work surface. | ✅ Primary use case |
-| **Cowork** (inside Claude Desktop) | Same config as Claude Desktop | **High.** Same model — your collaborators see the chat; commands run in your Warp pane. | ✅ Yes |
-| **Warp's native agent panel** | `~/.warp/.mcp.json` (see [docs/WARP_AGENT.md](docs/WARP_AGENT.md)) | **High.** Type into Warp's agent panel, agent calls our tools, output renders inline in Warp's chat. Same MCP, same code, second consumer. | ✅ Yes — see WARP_AGENT.md |
-| **Claude Code (CLI)** | `~/.claude.json` | **Marginal — only if you want commands in a *different* Warp tab from the one Claude Code is in.** Claude Code already runs *inside* a terminal pane (Warp or otherwise) and has its own built-in `Bash` tool that spawns subprocesses with pipes. For routine command execution Claude Code's built-in is shorter, faster, and doesn't need TCC permissions. The MCP is only worth registering if you want commands to land *visibly in a separate Warp tab* you control — e.g. as a "scratch" pane you can scroll through later. | ⚠️ Optional, niche |
-| **Other terminals (iTerm2, Terminal.app, Alacritty)** | Any of the above | **Low.** Most of v6.0's value is Warp-specific: `warp://` deeplinks, OSC 777 events, Warp agent integration, launch configs. The 24 server-side tools (clipboard, SSH, env snapshots, file watcher, etc.) work everywhere — but at that point you're using maybe two-thirds of the surface area. | ❌ Look elsewhere |
+| Host | Config | Recommended? |
+|---|---|---|
+| **[Warp Agent](https://app.warp.dev/referral/G9W3EY)** (Grok, Claude, GPT, Gemini — whatever Warp is set to) | `~/.warp/.mcp.json` | Yes — best fit. See [docs/WARP_AGENT.md](docs/WARP_AGENT.md) |
+| **Claude Desktop** | `~/Library/Application Support/Claude/claude_desktop_config.json` | Yes |
+| **ChatGPT desktop** (Connectors / Developer Mode) | host MCP settings; snippet in `config/chatgpt-mcp.json` | Yes, if your plan exposes local MCP |
+| **VS Code / Continue / Cline / Windsurf** | their MCP settings; see `config/` | Optional |
+| **Cursor** | `~/.cursor/mcp.json` | Optional — Cursor already has a terminal |
+| **Claude Code** | `~/.claude.json` | Niche — it already has Bash |
+| **Browser chats** (chatgpt.com, grok.com, claude.ai, Gemini web) | — | No. They cannot launch a local stdio server |
 
 ### Quick decision tree
 
-- **You use Warp + Claude Desktop and want commands visible in your terminal?** → Register here. Primary use case.
-- **You use Warp + Claude Code and want everything in one pane?** → Don't bother. Claude Code's built-in `Bash` tool is enough.
-- **You use Warp + Claude Code and want commands in a *separate* observable Warp tab?** → Register and use `execute_command` deliberately.
-- **You use Warp's native agent panel?** → Register in `~/.warp/.mcp.json`.
-- **You don't use Warp?** → This isn't the right MCP for you. Look at simpler subprocess-based MCPs.
+- **You use Warp and chat with Grok / ChatGPT / Claude / Gemini inside Warp?** → Register in `~/.warp/.mcp.json`. That's the whole product.
+- **You use Claude Desktop (or ChatGPT desktop) and want commands visible in Warp?** → Register there too. Same binary.
+- **You use Cursor or Claude Code and want everything in one pane?** → You probably don't need this.
+- **You only use a website chatbot?** → This MCP cannot reach that tab. Use a desktop MCP host.
 
-The "40 tools" headline is honest but slightly misleading: 5 of those tools (the AppleScript-keystroke ones — `execute_command`, `execute_with_auto_retrieve`, `execute_with_streaming`, `run_template`, `send_to_session`) are the Warp-routing crown jewels, and 25 of them are pure server-side utilities that any subprocess-based MCP could provide. The remaining 10 sit in between (deeplinks, OSC 777, profiles, file watchers). If the Warp-routing 5 don't appeal, the rest of this MCP is fine but unremarkable.
+Five of the 40 tools (`execute_command`, `execute_with_auto_retrieve`, `execute_with_streaming`, `run_template`, `send_to_session`) are the Warp-routing ones. The rest are ordinary server-side utilities (clipboard, SSH, snapshots, …) that work from any host.
 
 ## 🎯 Key Features
 
@@ -139,7 +122,7 @@ Save reusable patterns with variable substitution:
 }
 ```
 
-Templates are stored in `~/.claude-command-runner/templates.json` and persist across sessions.
+Templates are stored in `~/.warp-command-runner/templates.json` and persist across sessions.
 
 ### Smart Auto-Retrieve
 The `execute_with_auto_retrieve` command intelligently detects command types and adjusts wait times:
@@ -150,84 +133,76 @@ The `execute_with_auto_retrieve` command intelligently detects command types and
 
 ## 📊 Why Warp Terminal?
 
-[Warp Terminal](https://app.warp.dev/referral/G9W3EY) is the primary integration target. The other terminals work for the basics — what Warp uniquely unlocks in v6.0 is documented integration surfaces:
+[Warp Terminal](https://app.warp.dev/referral/G9W3EY) is the primary integration target. Other terminals work for the basics — Warp uniquely unlocks deeplinks, OSC 777, the native agent panel, and launch configs:
 
 | Feature | Warp | Terminal.app | iTerm2 |
 |---------|------|--------------|---------|
-| `warp://` deeplinks for tab/window | ✅ (v6.0 uses these) | ❌ | ❌ |
-| Native MCP agent panel — chat with Claude *in* the terminal | ✅ (`~/.warp/.mcp.json`) | ❌ | ❌ |
+| `warp://` deeplinks for tab/window | ✅ | ❌ | ❌ |
+| Native MCP agent panel — chat with Grok, ChatGPT, Claude, Gemini *in* the terminal | ✅ (`~/.warp/.mcp.json`) | ❌ | ❌ |
 | OSC 777 cli-agent event channel for status surfacing | ✅ | ❌ | ❌ |
 | Workspace profile → recognized launch config | ✅ (`~/.warp/launch_configurations/`) | ❌ | ❌ |
 | AppleScript-driven new tab + keystroke send | ✅ | ✅ | ✅ |
 | Modern UI/UX | ✅ | ⚠️ | ⚠️ |
 
-Output capture (`/tmp/<id>.json` polling) and the 24 tools that don't touch the terminal at all (clipboard, SSH, file watch, env snapshots, etc.) work identically across all terminals.
+Output capture (`/tmp/<id>.json` polling) and the tools that don't touch the terminal (clipboard, SSH, file watch, env snapshots, etc.) work identically across all terminals.
 
-> 💡 **Get Warp**: [Download Warp Terminal](https://app.warp.dev/referral/G9W3EY) – it's free, open source (AGPL-3.0), and makes the v6.0-specific surfaces above available to you.
+> Download Warp from [warp.dev](https://app.warp.dev/referral/G9W3EY). It is free, and the Warp-specific surfaces above need it.
 
 ## Installation
 
 ### Prerequisites
 - macOS 13.0 or later
 - Swift 6.0+ (Xcode 16+)
-- Claude Desktop
+- At least one **local MCP host** (Warp Agent, Claude Desktop, ChatGPT desktop, VS Code, …) — not a browser chat tab
 - A supported terminal ([Warp](https://app.warp.dev/referral/G9W3EY) strongly recommended)
 
 ### Quick Install
 
 1. Clone and build:
 ```bash
-git clone https://github.com/M-Pineapple/claude-command-runner.git
-cd claude-command-runner
+git clone https://github.com/M-Pineapple/warp-command-runner.git
+cd warp-command-runner
 
 # For the 5 keystroke-routing tools (execute_command, etc.) to work, the build
 # must be SIGNED with your code-signing identity. build.sh auto-detects a single
 # Apple Development / Developer ID identity; to be explicit (or if you have
 # several), export it first — find yours with:
 #   security find-identity -v -p codesigning
-export CCR_CODESIGN_IDENTITY="<your-cert-sha1>"   # optional if auto-detect finds one; persist in ~/.zshrc
+export WCR_CODESIGN_IDENTITY="<your-cert-sha1>"   # optional if auto-detect finds one; persist in ~/.zshrc
 ./build.sh
 ```
 > Only need the 34 non-keystroke tools (incl. `execute_pipeline`)? An unsigned build is fine — skip the `export`.
 
-2. **Pick your consumer(s)** — you can install for one or both. **v6.0.3 ships a `.app` bundle wrapper** — point at the binary INSIDE the bundle (the wrapper carries the Info.plist that macOS Sequoia+ needs to prompt for TCC permissions; without it, the 5 keystroke-routing tools silently fail):
+2. **Pick your MCP host(s)** — you can register the same binary in several. Point at the binary **inside** the `.app` bundle (macOS Sequoia+ needs the Info.plist for TCC prompts on the 5 keystroke-routing tools):
 
-   **A — Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+   **A — Warp Agent** (`~/.warp/.mcp.json`) — Grok, ChatGPT, Claude, Gemini, whichever Warp is set to:
    ```json
    {
      "mcpServers": {
-       "claude-command-runner": {
-         "command": "/path/to/claude-command-runner/.build/release/claude-command-runner.app/Contents/MacOS/claude-command-runner",
+       "warp-command-runner": {
+         "command": "/Applications/Warp Command Runner.app/Contents/MacOS/warp-command-runner",
          "args": []
        }
      }
    }
    ```
+   See [`docs/WARP_AGENT.md`](docs/WARP_AGENT.md).
 
-   **B — Warp's native agent** (`~/.warp/.mcp.json`):
-   ```json
-   {
-     "mcpServers": {
-       "claude-command-runner": {
-         "command": "/path/to/claude-command-runner/.build/release/claude-command-runner.app/Contents/MacOS/claude-command-runner",
-         "args": []
-       }
-     }
-   }
-   ```
-   See [`docs/WARP_AGENT.md`](docs/WARP_AGENT.md) for the full guide.
+   **B — Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`) — same JSON shape. ChatGPT desktop, Cursor, VS Code, Continue: copy a snippet from [`config/`](config/README.md) or [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
-   > **Upgrading from v6.0.0–6.0.2?** Edit your existing config file and append `.app/Contents/MacOS/claude-command-runner` to the path. The legacy bare-binary path still works for the 34 non-keystroke tools, but `execute_command` / `execute_with_auto_retrieve` / `execute_with_streaming` / `run_template` / `send_to_session` will silently fail without the bundle path.
+   After `./build.sh` you can also point at `$(pwd)/.build/release/warp-command-runner.app/Contents/MacOS/warp-command-runner` before copying the bundle to `/Applications/`.
+
+   > **Upgrading from v6.0.0–6.0.2?** Edit your existing config file and append `.app/Contents/MacOS/warp-command-runner` to the path. The legacy bare-binary path still works for the 34 non-keystroke tools, but `execute_command` / `execute_with_auto_retrieve` / `execute_with_streaming` / `run_template` / `send_to_session` will silently fail without the bundle path.
 
 3. **Grant Accessibility permission** (only required for `send_to_session` keystroke injection in v6.0; tab/window opening uses deeplinks and does not require it):
    - Open **System Settings → Privacy & Security → Accessibility**
-   - Click **+** and navigate to `claude-command-runner/.build/release/`
+   - Click **+** and navigate to `warp-command-runner/.build/release/`
    - Press **Cmd+Shift+.** to reveal the hidden `.build` folder
-   - Select the `claude-command-runner` binary and toggle it **on**
+   - Select the `warp-command-runner` binary and toggle it **on**
 
 > **Important:** macOS tracks permissions by binary identity. After every rebuild (`./build.sh`), you must remove the old entry and re-add the new binary in Accessibility settings.
 
-4. **Restart your client(s)** (Claude Desktop and/or Warp).
+4. **Restart your MCP host(s)** (Warp, Claude Desktop, ChatGPT desktop, …).
 
 5. **(Optional)** Install the shell shim for cleaner block-boundary capture:
    ```bash
@@ -240,25 +215,25 @@ export CCR_CODESIGN_IDENTITY="<your-cert-sha1>"   # optional if auto-detect find
 If you already have a signed install working (TCC permissions granted), upgrading is:
 
 ```bash
-cd claude-command-runner
+cd warp-command-runner
 git pull
 
 # Rebuild with the SAME signing identity you used originally. Without it, build.sh
 # falls back to an ad-hoc-signed bundle, macOS sees a new identity, and your
 # keystroke (TCC) grants stop applying → error 1002 on execute_command.
 # (build.sh auto-detects a single identity; export to be explicit.)
-export CCR_CODESIGN_IDENTITY="<your-cert-sha1>"   # persist in ~/.zshrc so you don't forget
+export WCR_CODESIGN_IDENTITY="<your-cert-sha1>"   # persist in ~/.zshrc so you don't forget
 ./build.sh
 
 # Confirm it signed with your cert (NOT adhoc) BEFORE replacing your good bundle:
-codesign -dvv .build/release/claude-command-runner.app 2>&1 | grep -E "Authority=Apple|Signature=adhoc"
+codesign -dvv .build/release/warp-command-runner.app 2>&1 | grep -E "Authority=Apple|Signature=adhoc"
 
 # Replace the deployed bundle (rm first — cp -R onto an existing .app nests it):
-rm -rf "/Applications/Claude Command Runner.app"
-cp -R .build/release/claude-command-runner.app "/Applications/Claude Command Runner.app"
+rm -rf "/Applications/Warp Command Runner.app"
+cp -R .build/release/warp-command-runner.app "/Applications/Warp Command Runner.app"
 ```
 
-Then restart Claude Desktop. Because the bundle keeps the same identifier and is signed with the same certificate, your existing TCC grants (Automation, Input Monitoring, Accessibility, Full Disk Access) carry over — **no re-granting needed**. If the keystroke tools start failing with error 1002 after an upgrade, you almost certainly rebuilt unsigned; re-sign with your cert and redeploy.
+Then restart your MCP host. If you upgraded from v6 and kept the same signing certificate, existing TCC grants on `com.m-pineapple.claude-command-runner` do **not** transfer to `com.m-pineapple.warp-command-runner` — re-grant Accessibility / Input Monitoring / Full Disk Access / Automation for the new bundle once. After that, same-cert rebuilds keep the grants.
 
 ### 🛡️ macOS Sequoia full setup recipe (the 7 ordered steps)
 
@@ -281,7 +256,7 @@ Then restart Claude Desktop. Because the bundle keeps the same identifier and is
 If you have a paid Apple Developer account, you already have one (check via `security find-identity -v -p codesigning`). If not, create a self-signed one:
 
 1. **Keychain Access** → menu **Certificate Assistant → Create a Certificate…**
-2. Name: `claude-command-runner`, Identity Type: **Self Signed Root**, Certificate Type: **Code Signing**
+2. Name: `warp-command-runner`, Identity Type: **Self Signed Root**, Certificate Type: **Code Signing**
 3. Click **Create** → **Continue** through warnings → **Done**
 
 Export the cert identifier for `build.sh` to find:
@@ -289,7 +264,7 @@ Export the cert identifier for `build.sh` to find:
 # Get the SHA-1 hash (more reliable than the cert name)
 security find-identity -v -p codesigning
 # Then in your shell rc (~/.zshrc, ~/.config/fish/config.fish, etc.):
-export CCR_CODESIGN_IDENTITY="<the-sha1-hash-from-above>"
+export WCR_CODESIGN_IDENTITY="<the-sha1-hash-from-above>"
 ```
 
 #### Step 2 — Build (creates the signed `.app` bundle)
@@ -298,12 +273,12 @@ export CCR_CODESIGN_IDENTITY="<the-sha1-hash-from-above>"
 ./build.sh
 ```
 
-`build.sh` invokes `scripts/make-app-bundle.sh`, which wraps the CLI in `.build/release/claude-command-runner.app/` with a proper `Info.plist` (CFBundleIdentifier `com.m-pineapple.claude-command-runner`, the three required `NSXxxUsageDescription` strings, LSUIElement=true). If `CCR_CODESIGN_IDENTITY` is set, the bundle is signed with that cert as a unit — stable cdhash across rebuilds.
+`build.sh` invokes `scripts/make-app-bundle.sh`, which wraps the CLI in `.build/release/warp-command-runner.app/` with a proper `Info.plist` (CFBundleIdentifier `com.m-pineapple.warp-command-runner`, the three required `NSXxxUsageDescription` strings, LSUIElement=true). If `WCR_CODESIGN_IDENTITY` is set, the bundle is signed with that cert as a unit — stable cdhash across rebuilds.
 
 **Verify:**
 ```bash
-codesign --display --verbose=4 .build/release/claude-command-runner.app | grep -E 'Identifier|TeamIdentifier|CDHash'
-codesign --verify --deep --strict .build/release/claude-command-runner.app  # should succeed silently
+codesign --display --verbose=4 .build/release/warp-command-runner.app | grep -E 'Identifier|TeamIdentifier|CDHash'
+codesign --verify --deep --strict .build/release/warp-command-runner.app  # should succeed silently
 ```
 
 #### Step 3 — Install the bundle into `/Applications/` (CRITICAL)
@@ -311,12 +286,12 @@ codesign --verify --deep --strict .build/release/claude-command-runner.app  # sh
 **macOS refuses to prompt for TCC permissions on bundles in `.build/release/` or other dev directories.** The bundle must live in `/Applications/`. Copy it:
 
 ```bash
-cp -R .build/release/claude-command-runner.app "/Applications/Claude Command Runner.app"
+cp -R .build/release/warp-command-runner.app "/Applications/Warp Command Runner.app"
 ```
 
 Verify the signature survived the copy:
 ```bash
-codesign --verify --deep --strict "/Applications/Claude Command Runner.app"
+codesign --verify --deep --strict "/Applications/Warp Command Runner.app"
 ```
 
 #### Step 4 — Point your MCP config at the `/Applications/` path
@@ -325,8 +300,8 @@ codesign --verify --deep --strict "/Applications/Claude Command Runner.app"
 ```json
 {
   "mcpServers": {
-    "claude-command-runner": {
-      "command": "/Applications/Claude Command Runner.app/Contents/MacOS/claude-command-runner",
+    "warp-command-runner": {
+      "command": "/Applications/Warp Command Runner.app/Contents/MacOS/warp-command-runner",
       "args": []
     }
   }
@@ -341,7 +316,7 @@ If you've been struggling with TCC denials previously, your TCC.db likely has st
 
 ```bash
 for svc in AppleEvents ListenEvent PostEvent Accessibility; do
-    tccutil reset "$svc" com.m-pineapple.claude-command-runner
+    tccutil reset "$svc" com.m-pineapple.warp-command-runner
 done
 ```
 
@@ -349,17 +324,17 @@ Each line should print "Successfully reset". If you see "no entries", that's als
 
 #### Step 6 — Grant the *three* TCC permissions (Full Disk Access is the surprise one)
 
-In **System Settings → Privacy & Security**, add `/Applications/Claude Command Runner.app` to each of:
+In **System Settings → Privacy & Security**, add `/Applications/Warp Command Runner.app` to each of:
 
 1. **Full Disk Access** — *unexpected but mandatory.* macOS sandbox does a preflight check for `kTCCServiceSystemPolicyAllFiles` before allowing osascript to spawn for keystroke chains. Without FDA on the bundle, the sandbox denies before TCC's AppleEvents check ever fires, and you get the misleading "send keystrokes" error.
 2. **Input Monitoring** — for `kTCCServiceListenEvent` / `kTCCServicePostEvent` (synthetic keystroke generation).
 3. **Accessibility** — for the `keystroke` AppleEvent action itself.
 
-Each grant requires Touch ID / admin password to confirm. **Bundle name appears as "Claude Command Runner"** in the panels.
+Each grant requires Touch ID / admin password to confirm. **Bundle name appears as "Warp Command Runner"** in the panels.
 
 #### Step 7 — Restart Claude Desktop, trigger once, grant the Automation prompt
 
-`⌘Q` Claude Desktop, reopen. On your first `execute_command`, macOS may show one more prompt — **Automation → "Claude Command Runner wants to control System Events"** — click Allow. After that, it's permanent. Future rebuilds don't reset anything (the cert keeps cdhash stable; the bundle keeps the identity stable).
+`⌘Q` Claude Desktop, reopen. On your first `execute_command`, macOS may show one more prompt — **Automation → "Warp Command Runner wants to control System Events"** — click Allow. After that, it's permanent. Future rebuilds don't reset anything (the cert keeps cdhash stable; the bundle keeps the identity stable).
 
 ---
 
@@ -376,7 +351,7 @@ Trigger an `execute_command` first, then immediately run the above. Read it for:
 - `service="kTCCServiceXxx"` — which permission category is being checked
 - `promptPolicy = 0` → macOS refuses to even prompt; usually a location problem (bundle not in `/Applications/`)
 - `promptPolicy = 2` + `Denied (Service Policy)` → you're missing the permission for the named service
-- `AttributionChain: responsible={identifier=com.m-pineapple.claude-command-runner, ...}` → good, TCC is identifying us correctly
+- `AttributionChain: responsible={identifier=com.m-pineapple.warp-command-runner, ...}` → good, TCC is identifying us correctly
 
 ### If you really can't get it working
 
@@ -491,67 +466,67 @@ Pure subprocess, no AppleScript, no TCC layer, captures output cleanly, works on
 **Simple Command:**
 ```
 You: "Check my Swift version"
-Claude: [execute_with_auto_retrieve: swift --version]
-Claude: "You're running Swift 6.0.2"
+Assistant: [execute_with_auto_retrieve: swift --version]
+Assistant: "You're running Swift 6.0.2"
 ```
 
 **Build Pipeline:**
 ```
 You: "Build, test, and package my app"
-Claude: [execute_pipeline with build → test → package steps]
-Claude: "Pipeline complete! Build: ✅ Test: ✅ Package: ✅"
+Assistant: [execute_pipeline with build → test → package steps]
+Assistant: "Pipeline complete! Build: ✅ Test: ✅ Package: ✅"
 ```
 
 **Streaming Long Build:**
 ```
 You: "Build this large project"
-Claude: [execute_with_streaming: swift build -c release]
-Claude: "Building... [live updates every 3 seconds]"
-Claude: "Build completed in 45 seconds!"
+Assistant: [execute_with_streaming: swift build -c release]
+Assistant: "Building... [live updates every 3 seconds]"
+Assistant: "Build completed in 45 seconds!"
 ```
 
 **Using Templates:**
 ```
 You: "Save a template for deploying to staging"
-Claude: [save_template: name="deploy-staging", template="cd {{project}} && ./deploy.sh staging"]
+Assistant: [save_template: name="deploy-staging", template="cd {{project}} && ./deploy.sh staging"]
 
 You: "Deploy MyApp to staging"
-Claude: [run_template: name="deploy-staging", variables={project: "MyApp"}]
+Assistant: [run_template: name="deploy-staging", variables={project: "MyApp"}]
 ```
 
 **Environment Context (v5.0):**
 ```
 You: "What's my current dev environment?"
-Claude: [get_environment_context]
-Claude: "You're on branch feature/auth, Python venv active, Node 20.11, 3 Docker containers running."
+Assistant: [get_environment_context]
+Assistant: "You're on branch feature/auth, Python venv active, Node 20.11, 3 Docker containers running."
 ```
 
 **Workspace Profiles (v5.0):**
 ```
 You: "Save this as my API project profile"
-Claude: [save_workspace_profile: name="api-project", directory="~/Projects/api", ...]
+Assistant: [save_workspace_profile: name="api-project", directory="~/Projects/api", ...]
 
 You: "Switch to the API project"
-Claude: [load_workspace_profile: name="api-project"]
+Assistant: [load_workspace_profile: name="api-project"]
 ```
 
 **File Watching (v5.0):**
 ```
 You: "Rebuild whenever a Swift file changes"
-Claude: [add_file_watch: path="./Sources", pattern="*.swift", command="swift build"]
-Claude: "Watching ./Sources for *.swift changes. Will run swift build on each change."
+Assistant: [add_file_watch: path="./Sources", pattern="*.swift", command="swift build"]
+Assistant: "Watching ./Sources for *.swift changes. Will run swift build on each change."
 ```
 
 **SSH Remote Execution (v5.0):**
 ```
 You: "Check disk space on the staging server"
-Claude: [ssh_execute: host="staging.example.com", username="deploy", command="df -h"]
-Claude: "Here's the disk usage on staging..."
+Assistant: [ssh_execute: host="staging.example.com", username="deploy", command="df -h"]
+Assistant: "Here's the disk usage on staging..."
 ```
 
 ## Configuration
 
-The configuration file is located at `~/.claude-command-runner/config.json`:
+The configuration file is located at `~/.warp-command-runner/config.json`:
 
 ```json
 {
@@ -590,11 +565,17 @@ The configuration file is located at `~/.claude-command-runner/config.json`:
 }
 ```
 
-Templates are stored separately at `~/.claude-command-runner/templates.json`.
-Workspace profiles are stored at `~/.claude-command-runner/profiles.json`.
-SSH profiles are stored at `~/.claude-command-runner/ssh_profiles.json`.
+Templates are stored separately at `~/.warp-command-runner/templates.json`.
+Workspace profiles are stored at `~/.warp-command-runner/profiles.json`.
+SSH profiles are stored at `~/.warp-command-runner/ssh_profiles.json`.
 
 ## 🤔 Frequently Asked Questions
+
+### Q: Can Grok, ChatGPT, or Gemini use this — not just Claude?
+**A:** Yes, if you chat inside a **local MCP host**. Warp's agent panel is the usual path: set Warp's model to Grok (or GPT, Claude, Gemini) and register this server in `~/.warp/.mcp.json`. ChatGPT desktop and Claude Desktop work the same way. **Browser** tabs on grok.com / chatgpt.com / claude.ai cannot launch a local process. Full matrix: [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
+
+### Q: What's new in v7.0.0?
+**A:** Rebrand from Claude Command Runner to Warp Command Runner. Same 40 tools and stdio MCP protocol; names, bundle ID, and `~/.warp-command-runner` paths updated. v6 config is copied on first launch.
 
 ### Q: What's new in v6.0.0?
 **A:** Re-pivot to Warp after Warp went open source. Dual-consumer architecture (register the same binary in `~/.warp/.mcp.json` to use it from Warp's native agent panel, in addition to Claude Desktop). `warp://` deeplinks replace AppleScript menu-clicking for tab/window operations. New OSC 777 emitter (`emit_warp_event`) surfaces structured events into Warp's UI. New optional shell shim emits clean preexec/command-finished events to the MCP. Workspace profiles can now also emit Warp-native launch configs. ~460 LOC of dead code removed. Tool count goes from a previously-undercounted 36 (the v5 README claimed 30) up to **39**. See [CHANGELOG.md](CHANGELOG.md) and [docs/WARP_AGENT.md](docs/WARP_AGENT.md) for the full story.
@@ -627,7 +608,7 @@ Then provide all variables when running:
 ```
 
 ### Q: Where are my templates stored?
-**A:** In `~/.claude-command-runner/templates.json`. They persist across sessions and Claude Desktop restarts.
+**A:** In `~/.warp-command-runner/templates.json`. They persist across sessions and MCP host restarts.
 
 ### Q: How long will auto-retrieve wait for my command?
 **A:** It depends on the command type:
@@ -639,10 +620,10 @@ Then provide all variables when running:
 For longer commands, use `execute_with_streaming` instead.
 
 ### Q: Can I use this with Terminal.app or iTerm2?
-**A:** Yes, basic command execution works with any terminal. However, automatic output capture and advanced features require Warp Terminal. [Get Warp free here](https://app.warp.dev/referral/G9W3EY).
+**A:** Yes, basic command execution works with any terminal. Automatic output capture and Warp-specific features (deeplinks, OSC 777, agent panel) need Warp. Download it from [warp.dev](https://app.warp.dev/referral/G9W3EY).
 
-### Q: Is it secure to let Claude run commands?
-**A:** Commands are sent directly to your terminal and execute automatically — there is no manual "press Enter" step. However, you can configure blocked commands and patterns in the config file to prevent dangerous operations. Always review the command Claude proposes before confirming in the chat interface.
+### Q: Is it secure to let an AI run commands?
+**A:** Commands are sent directly to your terminal and execute automatically — there is no manual "press Enter" step. Configure blocked commands in `~/.warp-command-runner/config.json`. Only attach this MCP to a host you trust. Do not expose it as a public HTTP server.
 
 ### Q: What happens if a pipeline step fails?
 **A:** Depends on the `on_fail` setting:
@@ -654,7 +635,7 @@ For longer commands, use `execute_with_streaming` instead.
 **A:** Not directly. You can create templates that contain multiple commands separated by `&&` or `;`, or compose by calling `run_template` and `execute_pipeline` from the same conversation.
 
 ### Q: Where is my command history stored?
-**A:** In an SQLite database at `~/.claude-command-runner/claude_commands.db`. It tracks all commands, outputs, exit codes, and execution times.
+**A:** In an SQLite database at `~/.warp-command-runner/warp_commands.db`. It tracks all commands, outputs, exit codes, and execution times.
 
 ## 🛠️ Troubleshooting
 
@@ -673,7 +654,7 @@ log show --predicate 'process == "tccd"' --last 20s --info --debug | grep -E 'm-
 You'll see one of:
 - `promptPolicy = 0` → bundle isn't in `/Applications/` (or no bundle at all). Fix: Steps 2-3 of the recipe.
 - `promptPolicy = 2` + `Denied (Service Policy)` for `kTCCServiceSystemPolicyAllFiles` → missing Full Disk Access on the bundle. Fix: Step 6 of the recipe.
-- `AttributionChain: responsible={identifier=claude-command-runner, ...}` (no `m-pineapple`) → you're not running from the bundle, you're running the bare binary. Fix: re-run `./build.sh` and update your MCP config to the `.app` path (Steps 2-4 of the recipe).
+- `AttributionChain: responsible={identifier=warp-command-runner, ...}` (no `m-pineapple`) → you're not running from the bundle, you're running the bare binary. Fix: re-run `./build.sh` and update your MCP config to the `.app` path (Steps 2-4 of the recipe).
 
 **Workaround if you don't want to bother with the recipe:**
 ```jsonc
@@ -682,7 +663,7 @@ You'll see one of:
 ```
 Pure subprocess, no AppleScript, zero TCC. Works on any macOS regardless of permissions. The 34 non-keystroke tools all work too.
 
-**Bundle ID Reference:** `com.m-pineapple.claude-command-runner` (this project), `com.anthropic.claudefordesktop` (Claude Desktop).
+**Bundle ID Reference:** `com.m-pineapple.warp-command-runner` (this project), `com.anthropic.claudefordesktop` (Claude Desktop).
 
 ---
 
@@ -697,9 +678,9 @@ The MCP binary requires **Accessibility** permission only for the AppleScript ke
 **Solution:**
 
 1. Open **System Settings → Privacy & Security → Accessibility**
-2. Click the **+** button and navigate to your `claude-command-runner` binary:
+2. Click the **+** button and navigate to your `warp-command-runner` binary:
    ```
-   /path/to/claude-command-runner/.build/release/claude-command-runner
+   /path/to/warp-command-runner/.build/release/warp-command-runner
    ```
 3. The `.build` folder is hidden by default — press **Cmd+Shift+.** in Finder to reveal it
 4. Toggle the permission **on** for the binary
@@ -721,7 +702,7 @@ The MCP binary requires **Accessibility** permission only for the AppleScript ke
 ### Streaming Not Updating
 1. Check that the command is actually running (not waiting for input)
 2. Increase `update_interval` if updates are too frequent
-3. Check `/tmp/claude_stream_*.log` for output files
+3. Check `/tmp/wcr_stream_*.log` for output files
 
 ### Pipeline Steps Skipped Unexpectedly
 1. Check the `on_fail` setting – `stop` will skip remaining steps
@@ -729,13 +710,13 @@ The MCP binary requires **Accessibility** permission only for the AppleScript ke
 3. Check exit codes in the pipeline summary
 
 ### Templates Not Saving
-1. Ensure `~/.claude-command-runner/` directory exists
+1. Ensure `~/.warp-command-runner/` directory exists
 2. Check write permissions on templates.json
 3. Verify JSON syntax in template definition
 
 ### Auto-Retrieve Not Working
 1. Ensure you're using `execute_with_auto_retrieve` (not `execute_command`)
-2. Check if command output file exists: `ls /tmp/claude_output_*.json`
+2. Check if command output file exists: `ls /tmp/wcr_output_*.json`
 3. For long commands, use `execute_with_streaming` instead
 
 ### Database Issues
@@ -743,49 +724,40 @@ If commands execute but aren't saved to the database:
 
 1. **Check database integrity**:
    ```bash
-   sqlite3 ~/.claude-command-runner/claude_commands.db "PRAGMA integrity_check;"
+   sqlite3 ~/.warp-command-runner/warp_commands.db "PRAGMA integrity_check;"
    ```
    
 2. **If corrupted**, backup and remove:
    ```bash
-   mv ~/.claude-command-runner/claude_commands.db ~/.claude-command-runner/claude_commands.db.backup
-   # Restart Claude Desktop - a new database will be created automatically
+   mv ~/.warp-command-runner/warp_commands.db ~/.warp-command-runner/warp_commands.db.backup
+   # Restart the MCP host — a new database is created automatically
    ```
 
 ## Architecture
 
 ```
-  ┌──────────────────┐                     ┌──────────────────┐
-  │  Claude Desktop  │                     │   Warp Agent     │
-  │   (TS client)    │                     │  (rmcp client)   │
-  └────────┬─────────┘                     └────────┬─────────┘
-           │ stdio                                  │ stdio
-           │ MCP                                    │ MCP
-           └──────────────────┬─────────────────────┘
-                              ▼
-              ┌─────────────────────────────────┐
-              │   claude-command-runner v6.0    │
-              │      (Swift, MCP server)        │
-              │      • 40 tools                 │
-              └─────────┬─────────┬─────────────┘
-                        │         │
-              ┌─────────┘         └──────────────┐
-              ▼                                  ▼
-   ┌────────────────────┐          ┌─────────────────────────┐
-   │   Warp Terminal    │          │   Optional shell shim   │
-   │  warp:// deeplinks │◀────────▶│ /tmp/ccr-shell-shim-    │
-   │  OSC 777 events    │          │   <uid>.sock (NIO)      │
-   │  AppleScript (typ) │          │   preexec/finished      │
-   └────────────────────┘          └─────────────────────────┘
-                        │
-                        ▼
-               ┌─────────────────┐
-               │   Remote Hosts  │
-               │    (via SSH)    │
-               └─────────────────┘
+  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+  │ Warp Agent   │  │ Claude Desk. │  │ ChatGPT /    │
+  │ (Grok, GPT,  │  │              │  │ Cursor / VS  │
+  │  Claude, …)  │  │              │  │ Code / …     │
+  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘
+         │ stdio MCP       │ stdio MCP       │ stdio MCP
+         └─────────────────┴─────────────────┘
+                           ▼
+         ┌─────────────────────────────────┐
+         │  warp-command-runner v7.0       │
+         │  Swift MCP server · 40 tools    │
+         └─────────┬───────────┬───────────┘
+                   │           │
+                   ▼           ▼
+         ┌──────────────┐  ┌─────────────────────┐
+         │ Warp Terminal│  │ Optional shell shim │
+         │ warp://      │  │ /tmp/wcr-shell-shim-│
+         │ OSC 777      │  │   <uid>.sock        │
+         └──────────────┘  └─────────────────────┘
 ```
 
-Two MCP consumers, one server. Tab/window operations use Warp's `warp://` URL scheme; status events use OSC 777 (printf-built); typing into a specific tab still uses AppleScript keystrokes (no Warp API exists for that). Optional shell shim adds clean preexec / command_finished events over a per-uid Unix socket.
+Any local MCP host, one server. Tab/window operations use Warp's `warp://` URL scheme; status events use OSC 777; typing into a tab still uses AppleScript keystrokes (Warp has no API for that). Browser chats cannot connect — see [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
 ## Contributing
 
@@ -799,20 +771,20 @@ We love contributions! Here's how:
 
 ### Development Setup
 ```bash
-git clone https://github.com/yourusername/claude-command-runner.git
-cd claude-command-runner
+git clone https://github.com/M-Pineapple/warp-command-runner.git
+cd warp-command-runner
 swift package resolve
 swift build
 ```
 
 ## 💖 Support This Project
 
-If Claude Command Runner has helped enhance your development workflow or saved you time with intelligent command execution, consider supporting its development:
+If Warp Command Runner has helped enhance your development workflow or saved you time with intelligent command execution, consider supporting its development:
 
 <a href="https://www.buymeacoffee.com/mpineapple" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
 Your support helps me:
-* Maintain and improve Claude Command Runner with new features
+* Maintain and improve Warp Command Runner with new features
 * Keep the project open-source and free for everyone
 * Dedicate more time to addressing user requests and bug fixes
 * Explore new terminal integrations and command intelligence
@@ -825,6 +797,6 @@ MIT License – see [LICENSE](LICENSE) file for details
 
 ---
 
-**Built with ❤️ by 🍍**
+**Built with ❤️**, originally by 🍍 as Claude Command Runner. v7 rebrands the same MCP for any host.
 
-*If you find this project helpful, give it a ⭐ and try [Warp Terminal](https://app.warp.dev/referral/G9W3EY)!*
+*If this helps, star the repo and try [Warp](https://app.warp.dev/referral/G9W3EY).*

@@ -1,0 +1,9 @@
+{
+  "_comment": "ChatGPT desktop (Connectors / Developer Mode, where OpenAI exposes local MCP). Same stdio shape as other hosts. ChatGPT in the browser cannot run this — see docs/COMPATIBILITY.md.",
+  "mcpServers": {
+    "warp-command-runner": {
+      "command": "/Applications/Warp Command Runner.app/Contents/MacOS/warp-command-runner",
+      "args": []
+    }
+  }
+}

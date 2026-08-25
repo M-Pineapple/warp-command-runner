@@ -14,10 +14,11 @@ xcuserdata/
 build/
 DerivedData/
 *.dSYM
-claude-command-runner
+warp-command-runner
+agent-tools/
 
 # Config and logs
-.claude-command-runner/
+.warp-command-runner/
 *.log
 debug.log
 
@@ -28,8 +29,8 @@ debug.log
 .DS_Store
 
 # Output files
-/tmp/claude_output_*.json
-/tmp/claude_pending_*.json
+/tmp/wcr_output_*.json
+/tmp/wcr_pending_*.json
 
 # Python (for tools directory)
 __pycache__/

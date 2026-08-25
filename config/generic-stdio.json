@@ -1,0 +1,9 @@
+{
+  "_comment": "Generic stdio MCP snippet. Copy the warp-command-runner key into whatever file your host documents (Continue, Cline, Windsurf, Gemini CLI, Claude Code ~/.claude.json, …).",
+  "mcpServers": {
+    "warp-command-runner": {
+      "command": "/Applications/Warp Command Runner.app/Contents/MacOS/warp-command-runner",
+      "args": []
+    }
+  }
+}

@@ -2,10 +2,18 @@
 
 import Foundation
 
-// Simple CLI for managing Claude Command Runner configuration
+// Simple CLI for managing Warp Command Runner configuration
 
-let configDirectory = FileManager.default.homeDirectoryForCurrentUser
-    .appendingPathComponent(".claude-command-runner")
+func resolvedConfigDirectory() -> URL {
+    let home = FileManager.default.homeDirectoryForCurrentUser
+    let current = home.appendingPathComponent(".warp-command-runner")
+    let legacy = home.appendingPathComponent(".claude-command-runner")
+    if FileManager.default.fileExists(atPath: current.path) { return current }
+    if FileManager.default.fileExists(atPath: legacy.path) { return legacy }
+    return current
+}
+
+let configDirectory = resolvedConfigDirectory()
 let configFile = configDirectory.appendingPathComponent("config.json")
 
 enum Command: String, CaseIterable {
@@ -28,7 +36,7 @@ enum Command: String, CaseIterable {
 
 func showHelp() {
     print("""
-    Claude Command Runner Configuration Manager
+    Warp Command Runner Configuration Manager
     
     Usage: config-manager <command>
     
@@ -43,7 +51,7 @@ func showHelp() {
 func showConfig() {
     guard FileManager.default.fileExists(atPath: configFile.path) else {
         print("No configuration file found at: \(configFile.path)")
-        print("Run 'claude-command-runner --init-config' to create one.")
+        print("Run 'warp-command-runner --init-config' to create one.")
         return
     }
     
@@ -191,7 +199,7 @@ case .edit:
 case .reset:
     resetConfig()
 case .validate:
-    print("Run 'claude-command-runner --validate-config' to validate configuration")
+    print("Run 'warp-command-runner --validate-config' to validate configuration")
 case .help:
     showHelp()
 }

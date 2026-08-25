@@ -1,4 +1,4 @@
-# TECH.md — claude-command-runner v6.0
+# TECH.md — warp-command-runner v6.0
 
 **Status:** Draft (2026-05-07)
 **Branch:** `v6.0-warp-pivot`
@@ -27,7 +27,7 @@ This document complements `PRODUCT.md`. PRODUCT.md is the **what and why**; TECH
                         │
                         ▼
           ┌─────────────────────────────┐
-          │  claude-command-runner      │
+          │  warp-command-runner      │
           │  (Swift, MCP server)        │
           │  36+ tools                  │
           └─────────────┬───────────────┘
@@ -103,16 +103,16 @@ Each tier ends with a clean commit on `v6.0-warp-pivot`. Build must pass after e
 
 | Path | LOC | Reason |
 |---|---|---|
-| `Sources/ClaudeCommandRunner/WarpDatabaseIntegration.swift` | 260 | Never reached from any registered tool. Hardcoded Warp schema. Confirmed dead by audit. |
-| `Sources/ClaudeCommandRunner/CommandReceiverService.swift` | ~190 | TCP listener on `127.0.0.1:9876` with `suggest`/`execute`/`ping` mock handlers only. Never invoked from production code. |
+| `Sources/WarpCommandRunner/WarpDatabaseIntegration.swift` | 260 | Never reached from any registered tool. Hardcoded Warp schema. Confirmed dead by audit. |
+| `Sources/WarpCommandRunner/CommandReceiverService.swift` | ~190 | TCP listener on `127.0.0.1:9876` with `suggest`/`execute`/`ping` mock handlers only. Never invoked from production code. |
 
 ### 3.2 Files to edit
 
 | Path | Change |
 |---|---|
-| `Sources/ClaudeCommandRunner/CommandHistory.swift` | Remove the single `:218-222` block that referenced `WarpDatabaseIntegration` (it's the only call site, and it's not reachable from a registered tool). Keep the rest of the file (used by `list_recent_commands`). |
-| `Sources/ClaudeCommandRunner/ClaudeCommandRunner.swift` | Remove any startup wiring that instantiated `CommandReceiverService` (verify in `init` or `run`). |
-| `Sources/ClaudeCommandRunner/CommandHandlers.swift` | The `:386` Task-based background-monitor path is unused. Remove it. The `CommandHandlersStable.swift` path is the live one and stays. |
+| `Sources/WarpCommandRunner/CommandHistory.swift` | Remove the single `:218-222` block that referenced `WarpDatabaseIntegration` (it's the only call site, and it's not reachable from a registered tool). Keep the rest of the file (used by `list_recent_commands`). |
+| `Sources/WarpCommandRunner/WarpCommandRunner.swift` | Remove any startup wiring that instantiated `CommandReceiverService` (verify in `init` or `run`). |
+| `Sources/WarpCommandRunner/CommandHandlers.swift` | The `:386` Task-based background-monitor path is unused. Remove it. The `CommandHandlersStable.swift` path is the live one and stays. |
 | `README.md` | Replace "30 tools" with "36 tools" (multiple occurrences). Add the six undocumented tools to the feature listing: `set_notification_preference`, `cleanup_sessions`, `list_file_watches`, `delete_workspace_profile`, `list_ssh_profiles`, `delete_ssh_profile`. |
 
 ### 3.3 Verification
@@ -308,8 +308,8 @@ To ship in README:
 ```json
 {
   "mcpServers": {
-    "claude-command-runner": {
-      "command": "/Users/<you>/Github/claude-command-runner/.build/release/ClaudeCommandRunner",
+    "warp-command-runner": {
+      "command": "/Users/<you>/Github/warp-command-runner/.build/release/WarpCommandRunner",
       "args": []
     }
   }
@@ -327,7 +327,7 @@ To ship in README:
 
 ### 7.1 Protocol
 
-The shim writes its own structured events to a Unix socket the MCP listens on (e.g. `/tmp/ccr-shell-shim.sock`).
+The shim writes its own structured events to a Unix socket the MCP listens on (e.g. `/tmp/wcr-shell-shim.sock`).
 
 **Wire format** (line-delimited JSON):
 ```jsonc
@@ -344,7 +344,7 @@ The shim parses Warp's DCS payload from the controlling terminal and forwards th
 | `helper/shell-shim.zsh` | The script users source from `~/.zshrc` |
 | `helper/shell-shim.bash` | Bash equivalent |
 | `helper/install-shim.sh` | Idempotent installer that adds a marker block to the user's shell rc |
-| `Sources/ClaudeCommandRunner/ShimSocket.swift` | NIO Unix-domain-socket listener; consumed by execute_command path |
+| `Sources/WarpCommandRunner/ShimSocket.swift` | NIO Unix-domain-socket listener; consumed by execute_command path |
 
 ### 7.3 Behavior
 
@@ -440,5 +440,5 @@ Warp moves fast. The `cli-agent` events we use (`tool_complete`, etc.) might hav
 
 - All work on `v6.0-warp-pivot`
 - One commit per Tier (or sub-Tier where logical), squashable later if user prefers
-- Release: tag `v6.0.0`, push to `M-Pineapple/claude-command-runner`, draft GitHub Release notes from CHANGELOG
+- Release: tag `v6.0.0`, push to `M-Pineapple/warp-command-runner`, draft GitHub Release notes from CHANGELOG
 - Memory file `project_claude_command_runner_v6.md` updated with final commit SHA at release time

@@ -5,7 +5,7 @@ import Logging
 // SQLite constants
 fileprivate let SQLITE_TRANSIENT = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
-/// SQLite database manager for Claude Command Runner
+/// SQLite database manager for Warp Command Runner
 public class DatabaseManager {
     internal var db: OpaquePointer?
     private let dbPath: String
@@ -15,8 +15,8 @@ public class DatabaseManager {
     // SQLITE_OPEN_FULLMUTEX, belt and braces) removes the data race; SQLite
     // serialises internally anyway, so the old concurrent-reader design
     // bought nothing.
-    internal let queue = DispatchQueue(label: "com.claude-command-runner.database")
-    private let logger = Logger(label: "com.claude.command-runner.database")
+    internal let queue = DispatchQueue(label: "com.warp-command-runner.database")
+    private let logger = Logger(label: "com.warp-command-runner.database")
 
     /// Current schema version; bump and add a migration step in migrateIfNeeded().
     private static let schemaVersion: Int32 = 1
@@ -24,12 +24,10 @@ public class DatabaseManager {
     public static let shared = DatabaseManager()
     
     private init() {
-        // Default database location
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser
-        let dbDirectory = homeDir.appendingPathComponent(".claude-command-runner")
+        AppPaths.migrateLegacyConfigIfNeeded()
+        let dbDirectory = AppPaths.configDirectory
         try? FileManager.default.createDirectory(at: dbDirectory, withIntermediateDirectories: true)
-        
-        self.dbPath = dbDirectory.appendingPathComponent("claude_commands.db").path
+        self.dbPath = AppPaths.databaseURL.path
         setupDatabase()
     }
     

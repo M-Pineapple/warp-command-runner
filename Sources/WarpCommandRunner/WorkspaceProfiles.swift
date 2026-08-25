@@ -20,8 +20,7 @@ actor WorkspaceProfileManager {
     private let profilesPath: URL
 
     init() {
-        let dir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude-command-runner")
+        let dir = AppPaths.configDirectory
         let path = dir.appendingPathComponent("profiles.json")
         profilesPath = path
 

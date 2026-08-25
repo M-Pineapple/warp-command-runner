@@ -1,46 +1,27 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Claude Command Runner — combined identity icon
+  Warp Command Runner — identity icon
 
-  Uses official brand glyphs:
-    - Warp glyph from warpdotdev/warp (AGPL-3.0) at
-      app/channels/local/icon/AppIcon.icon/Assets/warp-glyph 3.svg
-    - Claude asterisk from Simple Icons (community-curated brand SVGs)
+  Warp glyph from warpdotdev/warp (AGPL-3.0), used for identification of a
+  third-party MCP that drives Warp. Three nodes stand in for any MCP host
+  model (Grok, ChatGPT, Claude, Gemini, …). Review Warp brand guidelines
+  before reuse beyond identification.
 
-  Brand-use note: this composition is intended as compatibility / integration
-  identification for a third-party MCP project. If you publish this widely,
-  review Warp's and Anthropic's brand guidelines before reuse beyond
-  identification purposes.
-
-  Animation: terminal cursor blinks (1.2s steps), Claude asterisk rotates
-  slowly (60s/revolution). Animations work in GitHub README inline rendering
-  and any modern browser. Render to PNG for static use (e.g. GitHub Social
-  Preview, which requires a raster image).
+  Animation: terminal cursor blinks (1.2s steps).
 -->
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Claude Command Runner">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Warp Command Runner">
   <style>
     @keyframes blink {
       0%, 49% { opacity: 1; }
       50%, 100% { opacity: 0; }
     }
     .cursor { animation: blink 1.2s steps(1) infinite; }
-
-    @keyframes spin-slow {
-      from { transform: rotate(0deg); }
-      to   { transform: rotate(360deg); }
-    }
-    .asterisk-spin {
-      transform-origin: 12px 12px;
-      animation: spin-slow 60s linear infinite;
-    }
   </style>
 
-  <!-- Black rounded background -->
   <rect x="0" y="0" width="1024" height="1024" rx="200" ry="200" fill="#000000"/>
 
   <!-- Terminal prompt:  >  and blinking _ cursor -->
   <g fill="#FFFFFF" transform="translate(280 200)">
-    <!-- > chevron, drawn as a clean filled angle -->
     <path d="M 0 0
              L 0 80
              L 140 170
@@ -48,23 +29,20 @@
              L 0 340
              L 240 170
              Z"/>
-    <!-- _ cursor to the right of the chevron, blinking -->
     <rect class="cursor" x="290" y="230" width="160" height="48" rx="8"/>
   </g>
 
-  <!-- Bottom-left: official Warp glyph, scaled to ~360x360 and positioned -->
+  <!-- Bottom-left: Warp glyph -->
   <g transform="translate(80 540) scale(0.36)">
     <path d="M454.581 331.499C454.716 330.936 454.784 330.655 454.714 330.434C454.652 330.24 454.522 330.075 454.348 329.97C454.149 329.851 453.86 329.851 453.282 329.851H251.768C211.282 329.851 178.461 364.057 178.461 406.252V702.871C178.461 745.067 211.282 779.273 251.768 779.273H500.82C501.197 779.273 501.385 779.273 501.541 779.207C501.679 779.148 501.798 779.054 501.887 778.934C501.988 778.797 502.032 778.614 502.12 778.248L511.508 739.11C511.643 738.547 511.71 738.266 511.64 738.045C511.579 737.851 511.449 737.686 511.275 737.581C511.076 737.462 510.787 737.462 510.208 737.462H358.897C358.318 737.462 358.029 737.462 357.83 737.342C357.656 737.237 357.526 737.072 357.465 736.878C357.395 736.657 357.462 736.376 357.597 735.813L454.581 331.499Z" fill="#1458B8"/>
     <path d="M520.507 244.727H772.764C813.597 244.727 846.7 278.933 846.7 321.129V617.747C846.7 659.943 813.597 694.149 772.764 694.149H411.775L520.507 244.727Z" fill="url(#warp-grad)"/>
   </g>
 
-  <!-- Bottom-right: official Claude asterisk
-       Nested groups so CSS animation doesn't wipe out the static translate+scale.
-       Outer = positioning (untouched by CSS). Inner = rotation (animated via CSS). -->
-  <g transform="translate(620 620) scale(12.5)" fill="#D97757">
-    <g class="asterisk-spin">
-      <path d="m4.7144 15.9555 4.7174-2.6471.079-.2307-.079-.1275h-.2307l-.7893-.0486-2.6956-.0729-2.3375-.0971-2.2646-.1214-.5707-.1215-.5343-.7042.0546-.3522.4797-.3218.686.0608 1.5179.1032 2.2767.1578 1.6514.0972 2.4468.255h.3886l.0546-.1579-.1336-.0971-.1032-.0972L6.973 9.8356l-2.55-1.6879-1.3356-.9714-.7225-.4918-.3643-.4614-.1578-1.0078.6557-.7225.8803.0607.2246.0607.8925.686 1.9064 1.4754 2.4893 1.8336.3643.3035.1457-.1032.0182-.0728-.164-.2733-1.3539-2.4467-1.445-2.4893-.6435-1.032-.17-.6194c-.0607-.255-.1032-.4674-.1032-.7285L6.287.1335 6.6997 0l.9957.1336.419.3642.6192 1.4147 1.0018 2.2282 1.5543 3.0296.4553.8985.2429.8318.091.255h.1579v-.1457l.1275-1.706.2368-2.0947.2307-2.6957.0789-.7589.3764-.9107.7468-.4918.5828.2793.4797.686-.0668.4433-.2853 1.8517-.5586 2.9021-.3643 1.9429h.2125l.2429-.2429.9835-1.3053 1.6514-2.0643.7286-.8196.85-.9046.5464-.4311h1.0321l.759 1.1293-.34 1.1657-1.0625 1.3478-.8804 1.1414-1.2628 1.7-.7893 1.36.0729.1093.1882-.0183 2.8535-.607 1.5421-.2794 1.8396-.3157.8318.3886.091.3946-.3278.8075-1.967.4857-2.3072.4614-3.4364.8136-.0425.0304.0486.0607 1.5482.1457.6618.0364h1.621l3.0175.2247.7892.522.4736.6376-.079.4857-1.2142.6193-1.6393-.3886-3.825-.9107-1.3113-.3279h-.1822v.1093l1.0929 1.0686 2.0035 1.8092 2.5075 2.3314.1275.5768-.3218.4554-.34-.0486-2.2039-1.6575-.85-.7468-1.9246-1.621h-.1275v.17l.4432.6496 2.3436 3.5214.1214 1.0807-.17.3521-.6071.2125-.6679-.1214-1.3721-1.9246L14.38 17.959l-1.1414-1.9428-.1397.079-.674 7.2552-.3156.3703-.7286.2793-.6071-.4614-.3218-.7468.3218-1.4753.3886-1.9246.3157-1.53.2853-1.9004.17-.6314-.0121-.0425-.1397.0182-1.4328 1.9672-2.1796 2.9446-1.7243 1.8456-.4128.164-.7164-.3704.0667-.6618.4008-.5889 2.386-3.0357 1.4389-1.882.929-1.0868-.0062-.1579h-.0546l-6.3385 4.1164-1.1293.1457-.4857-.4554.0608-.7467.2307-.2429 1.9064-1.3114Z"/>
-    </g>
+  <!-- Bottom-right: any-model nodes (Grok / ChatGPT / Claude / …) -->
+  <g transform="translate(640 700)">
+    <circle cx="0" cy="70" r="42" fill="#22C55E"/>
+    <circle cx="90" cy="0" r="42" fill="#F59E0B"/>
+    <circle cx="180" cy="70" r="42" fill="#38BDF8"/>
   </g>
 
   <defs>

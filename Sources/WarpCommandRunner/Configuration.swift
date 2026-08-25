@@ -1,7 +1,7 @@
 import Foundation
 import Logging
 
-/// Configuration structure for Claude Command Runner
+/// Configuration structure for Warp Command Runner
 public struct Configuration: Codable {
     public struct Terminal: Codable {
         public var preferred: String = "auto"
@@ -137,9 +137,8 @@ public struct Configuration: Codable {
 
 /// Configuration manager for loading and saving config
 public class ConfigurationManager {
-    private static let configDirectory = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".claude-command-runner")
-    private static let configFile = configDirectory.appendingPathComponent("config.json")
+    private static var configDirectory: URL { AppPaths.configDirectory }
+    private static var configFile: URL { configDirectory.appendingPathComponent("config.json") }
     
     private var configuration: Configuration
     private let logger: Logger?

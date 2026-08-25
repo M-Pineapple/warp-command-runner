@@ -3,7 +3,7 @@ import MCP
 import Logging
 
 /// Extension to add missing MCP protocol methods
-extension ClaudeCommandRunner {
+extension WarpCommandRunner {
     
     /// Handle resources/list method
     static func setupResourceHandlers(server: Server, logger: Logger) async {

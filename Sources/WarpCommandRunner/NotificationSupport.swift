@@ -148,7 +148,7 @@ func handleSetNotificationPreference(params: CallTool.Parameters, logger: Logger
     // Send a test notification to confirm it works
     if updated.enabled {
         sendMacOSNotification(
-            title: "Claude Command Runner",
+            title: AppIdentity.displayName,
             message: "Notifications configured successfully",
             sound: updated.soundEnabled,
             logger: logger

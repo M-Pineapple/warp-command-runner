@@ -59,11 +59,14 @@ actor ShellShimEventBus {
 
     /// Find the most recent `command_finished` event whose command line
     /// references the given command id. `execute_command` injects
-    /// `bash /tmp/claude_script_<id>.sh`, so the shim observes that path —
+    /// `bash /tmp/wcr_script_<id>.sh`, so the shim observes that path —
     /// letting us confirm completion and read the authoritative shell exit code.
     func finishedEvent(forCommandId id: String) -> ShellShimEvent? {
-        let needle = "claude_script_\(id)"
-        return events.last { $0.type == "command_finished" && ($0.command?.contains(needle) ?? false) }
+        let needles = TempFiles.scriptNeedle(commandId: id)
+        return events.last { event in
+            guard event.type == "command_finished", let command = event.command else { return false }
+            return needles.contains(where: { command.contains($0) })
+        }
     }
 }
 
@@ -74,8 +77,7 @@ let shellShimEventBus = ShellShimEventBus()
 
 /// Per-user socket path so multiple users on the same machine don't collide.
 func shellShimSocketPath() -> String {
-    let uid = getuid()
-    return "/tmp/ccr-shell-shim-\(uid).sock"
+    TempFiles.shellShimSocketPath()
 }
 
 /// NIO inbound handler: receives raw bytes, splits on newline, decodes each

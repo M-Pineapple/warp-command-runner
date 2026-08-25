@@ -7,7 +7,7 @@ import Logging
 /// Watches file system paths for changes and triggers commands automatically.
 /// Uses macOS DispatchSource.makeFileSystemObjectSource for efficient native monitoring.
 ///
-/// Feature #6 — bridges Claude from reactive assistant to proactive development partner.
+/// Feature #6 — bridges the chat from reactive assistant to proactive development partner.
 /// Example: "Run tests whenever a .swift file changes"
 actor FileWatcher {
 
@@ -60,7 +60,7 @@ actor FileWatcher {
     private var activeWatches: [String: ActiveWatch] = [:]
     private var rules: [String: WatchRule] = [:]
     private let logger = Logger(label: "FileWatcher")
-    private let watchQueue = DispatchQueue(label: "com.claude-command-runner.filewatcher", qos: .utility)
+    private let watchQueue = DispatchQueue(label: "com.warp-command-runner.filewatcher", qos: .utility)
 
     private init() {}
 

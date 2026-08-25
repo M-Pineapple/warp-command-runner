@@ -1,0 +1,9 @@
+{
+  "_comment": "Cursor — ~/.cursor/mcp.json (or project .cursor/mcp.json). Cursor already has a terminal; register this only if you want commands typed into Warp.",
+  "mcpServers": {
+    "warp-command-runner": {
+      "command": "/Applications/Warp Command Runner.app/Contents/MacOS/warp-command-runner",
+      "args": []
+    }
+  }
+}

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/make-app-bundle.sh
 #
-# Wrap the built `claude-command-runner` CLI binary into a proper macOS .app
+# Wrap the built `warp-command-runner` CLI binary into a proper macOS .app
 # bundle with embedded Info.plist. v6.0.3 introduced this because modern
 # macOS (Sequoia+) silently denies TCC permission requests from CLI binaries
 # that lack an Info.plist with NSXxxUsageDescription strings. Wrapping in a
@@ -16,7 +16,7 @@
 # Idempotent — re-running overwrites the bundle. Safe to call from build.sh
 # after every swift build.
 #
-# Optional: set CCR_CODESIGN_IDENTITY to also codesign the bundle. This is
+# Optional: set WCR_CODESIGN_IDENTITY to also codesign the bundle. This is
 # the recommended path (gives the bundle a stable cdhash across rebuilds
 # so TCC grants persist).
 
@@ -24,20 +24,20 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="${PROJECT_ROOT}/.build/release"
-BINARY="${BUILD_DIR}/claude-command-runner"
-BUNDLE="${BUILD_DIR}/claude-command-runner.app"
+BINARY="${BUILD_DIR}/warp-command-runner"
+BUNDLE="${BUILD_DIR}/warp-command-runner.app"
 
 # Read version from the Swift source (single source of truth: the
 # `static let version` constant). The `|| true` matters: under set -e a
 # non-matching grep would otherwise kill the script silently before the
 # bundle is created. Fall back to the older `version: "x.y.z"` pattern,
 # then to a hardcoded floor.
-VERSION=$(grep -E 'static let version = "[0-9]+\.[0-9]+\.[0-9]+"' "${PROJECT_ROOT}/Sources/ClaudeCommandRunner/ClaudeCommandRunner.swift" 2>/dev/null | head -1 | sed -E 's/.*version = "([^"]+)".*/\1/' || true)
+VERSION=$(grep -E 'static let version = "[0-9]+\.[0-9]+\.[0-9]+"' "${PROJECT_ROOT}/Sources/WarpCommandRunner/AppIdentity.swift" 2>/dev/null | head -1 | sed -E 's/.*version = "([^"]+)".*/\1/' || true)
 if [[ -z "${VERSION}" ]]; then
-    VERSION=$(grep -E 'version: "[0-9]+\.[0-9]+\.[0-9]+"' "${PROJECT_ROOT}/Sources/ClaudeCommandRunner/ClaudeCommandRunner.swift" 2>/dev/null | head -1 | sed -E 's/.*version: "([^"]+)".*/\1/' || true)
+    VERSION=$(grep -E 'static let version = "[0-9]+\.[0-9]+\.[0-9]+"' "${PROJECT_ROOT}/Sources/WarpCommandRunner/WarpCommandRunner.swift" 2>/dev/null | head -1 | sed -E 's/.*version = "([^"]+)".*/\1/' || true)
 fi
 if [[ -z "${VERSION}" ]]; then
-    VERSION="6.1.0"
+    VERSION="7.0.0"
 fi
 
 if [[ ! -f "${BINARY}" ]]; then
@@ -54,9 +54,9 @@ rm -rf "${BUNDLE}"
 mkdir -p "${BUNDLE}/Contents/MacOS"
 
 # Copy the binary into the bundle. (mv would be faster but cp keeps the
-# original at .build/release/claude-command-runner so existing scripts
+# original at .build/release/warp-command-runner so existing scripts
 # that reference that path don't break — backwards compat.)
-cp "${BINARY}" "${BUNDLE}/Contents/MacOS/claude-command-runner"
+cp "${BINARY}" "${BUNDLE}/Contents/MacOS/warp-command-runner"
 
 # Write the Info.plist. The three NSXxxUsageDescription keys are the
 # critical bits — without them, macOS won't prompt for the corresponding
@@ -68,13 +68,13 @@ cat > "${BUNDLE}/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
     <key>CFBundleIdentifier</key>
-    <string>com.m-pineapple.claude-command-runner</string>
+    <string>com.m-pineapple.warp-command-runner</string>
     <key>CFBundleName</key>
-    <string>Claude Command Runner</string>
+    <string>Warp Command Runner</string>
     <key>CFBundleDisplayName</key>
-    <string>Claude Command Runner</string>
+    <string>Warp Command Runner</string>
     <key>CFBundleExecutable</key>
-    <string>claude-command-runner</string>
+    <string>warp-command-runner</string>
     <key>CFBundleVersion</key>
     <string>${VERSION}</string>
     <key>CFBundleShortVersionString</key>
@@ -88,11 +88,11 @@ cat > "${BUNDLE}/Contents/Info.plist" <<PLIST
     <key>LSUIElement</key>
     <true/>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Claude Command Runner uses AppleEvents to send commands to Warp Terminal so they appear typed in your active tab.</string>
+    <string>Warp Command Runner uses AppleEvents to send commands to Warp Terminal so they appear typed in your active tab.</string>
     <key>NSInputMonitoringUsageDescription</key>
-    <string>Claude Command Runner needs Input Monitoring to inject keystrokes that drive command execution in your terminal.</string>
+    <string>Warp Command Runner needs Input Monitoring to inject keystrokes that drive command execution in your terminal.</string>
     <key>NSAccessibilityUsageDescription</key>
-    <string>Claude Command Runner needs Accessibility access to drive Warp Terminal via System Events for the keystroke-routing tools.</string>
+    <string>Warp Command Runner needs Accessibility access to drive Warp Terminal via System Events for the keystroke-routing tools.</string>
 </dict>
 </plist>
 PLIST
@@ -103,19 +103,19 @@ PLIST
 # that TCC trusts. Without codesigning, the bundle still works but
 # every rebuild produces a different identity (ad-hoc) so TCC grants
 # go stale (the same problem v6.0.2 documented for the bare binary).
-if [[ -n "${CCR_CODESIGN_IDENTITY:-}" ]]; then
-    echo "Code-signing bundle with identity: ${CCR_CODESIGN_IDENTITY}"
-    codesign --force --sign "${CCR_CODESIGN_IDENTITY}" \
-        --identifier "com.m-pineapple.claude-command-runner" \
+if [[ -n "${WCR_CODESIGN_IDENTITY:-}" ]]; then
+    echo "Code-signing bundle with identity: ${WCR_CODESIGN_IDENTITY}"
+    codesign --force --sign "${WCR_CODESIGN_IDENTITY}" \
+        --identifier "com.m-pineapple.warp-command-runner" \
         "${BUNDLE}"
     NEW_HASH=$(codesign -d --verbose=4 "${BUNDLE}" 2>&1 | grep CandidateCDHash | head -1)
     echo "Bundle code-signing complete. ${NEW_HASH}"
 else
-    echo "(Skipping bundle code-signing — CCR_CODESIGN_IDENTITY not set.)"
+    echo "(Skipping bundle code-signing — WCR_CODESIGN_IDENTITY not set.)"
     echo "  TCC grants for the .app bundle will reset on every rebuild without"
     echo "  it. See README 'Stable code signing'."
 fi
 
 echo "App bundle ready at: ${BUNDLE}"
-echo "Install path for Claude Desktop / Warp Agent MCP config:"
-echo "  ${BUNDLE}/Contents/MacOS/claude-command-runner"
+echo "Install path for any MCP host config:"
+echo "  ${BUNDLE}/Contents/MacOS/warp-command-runner"

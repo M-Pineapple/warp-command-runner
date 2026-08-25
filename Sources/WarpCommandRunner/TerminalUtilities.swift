@@ -29,7 +29,7 @@ func escapeForDoubleQuotedShell(_ string: String) -> String {
 /// Create AppleScript for different terminal types
 func createAppleScript(for terminal: TerminalConfig.TerminalType, command: String) -> String {
     // All current callers pass internally-generated commands
-    // ("bash /tmp/claude_script_<uuid>.sh"), but escape regardless so a
+    // ("bash /tmp/wcr_script_<uuid>.sh"), but escape regardless so a
     // future caller passing arbitrary text can't break the script.
     let escaped = escapeForAppleScript(command)
     switch terminal {
@@ -105,7 +105,7 @@ func createAppleScript(for terminal: TerminalConfig.TerminalType, command: Strin
 
 /// Create output capture script
 func createOutputCaptureScript(command: String, commandId: String) -> String {
-    let outputFile = "/tmp/claude_output_\(commandId).json"
+    let outputFile = TempFiles.outputPath(commandId: commandId)
     
     return """
     #!/bin/bash
@@ -114,7 +114,7 @@ func createOutputCaptureScript(command: String, commandId: String) -> String {
     COMMAND='\(command.replacingOccurrences(of: "'", with: "'\"'\"'"))'
     
     # Create a temporary file for stderr
-    STDERR_FILE="/tmp/claude_stderr_\(commandId).tmp"
+    STDERR_FILE="\(TempFiles.stderrPath(commandId: commandId))"
     
     # Execute command and capture output
     OUTPUT=$(eval "$COMMAND" 2>"$STDERR_FILE")

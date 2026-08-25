@@ -327,8 +327,8 @@ func handleExecuteWithStreaming(params: CallTool.Parameters, logger: Logger, con
     
     // Create unique output file for this execution
     let commandId = UUID().uuidString
-    let outputFile = "/tmp/claude_stream_\(commandId).log"
-    let exitCodeFile = "/tmp/claude_stream_\(commandId).exit"
+    let outputFile = TempFiles.streamLogPath(commandId: commandId)
+    let exitCodeFile = TempFiles.streamExitPath(commandId: commandId)
     
     // Build command that writes to file continuously
     var fullCommand = commandString
@@ -355,7 +355,7 @@ func handleExecuteWithStreaming(params: CallTool.Parameters, logger: Logger, con
     \(wrappedCommand)
     """
     
-    let tempScript = "/tmp/claude_stream_script_\(commandId).sh"
+    let tempScript = TempFiles.streamScriptPath(commandId: commandId)
     try scriptContent.write(toFile: tempScript, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tempScript)
     
@@ -459,7 +459,7 @@ struct CommandTemplate: Codable {
 }
 
 /// Template storage file path
-private let templatesFilePath = NSHomeDirectory() + "/.claude-command-runner/templates.json"
+private let templatesFilePath = AppPaths.configDirectory.appendingPathComponent("templates.json").path
 
 /// Save a command template
 func handleSaveTemplate(params: CallTool.Parameters, logger: Logger) async -> CallTool.Result {

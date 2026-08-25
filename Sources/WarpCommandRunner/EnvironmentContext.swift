@@ -53,32 +53,32 @@ private func buildEnvironmentProbeScript(workingDirectory: String?) -> String {
     }
 
     script += """
-    echo "CCR_CWD=$(pwd)"
-    echo "CCR_USER=$(whoami)"
-    echo "CCR_HOSTNAME=$(hostname -s 2>/dev/null || echo 'unknown')"
-    echo "CCR_SHELL=$SHELL"
-    echo "CCR_GIT_BRANCH=$(git branch --show-current 2>/dev/null || echo 'none')"
-    echo "CCR_GIT_STATUS=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
-    echo "CCR_GIT_REMOTE=$(git remote get-url origin 2>/dev/null || echo 'none')"
-    echo "CCR_GIT_DIRTY=$(git diff --quiet 2>/dev/null && echo 'clean' || echo 'dirty')"
-    echo "CCR_PYTHON_VENV=${VIRTUAL_ENV:-none}"
-    echo "CCR_CONDA_ENV=${CONDA_DEFAULT_ENV:-none}"
-    echo "CCR_NODE_VERSION=$(node -v 2>/dev/null || echo 'none')"
-    echo "CCR_NPM_VERSION=$(npm -v 2>/dev/null || echo 'none')"
-    echo "CCR_SWIFT_VERSION=$(swift --version 2>/dev/null | head -1 || echo 'none')"
-    echo "CCR_PYTHON_VERSION=$(python3 --version 2>/dev/null || echo 'none')"
-    echo "CCR_DOCKER_RUNNING=$(docker ps -q 2>/dev/null | wc -l | tr -d ' ')"
-    echo "CCR_RUBY_VERSION=$(ruby -v 2>/dev/null | head -1 || echo 'none')"
-    echo "CCR_GO_VERSION=$(go version 2>/dev/null || echo 'none')"
-    echo "CCR_RUST_VERSION=$(rustc --version 2>/dev/null || echo 'none')"
-    echo "CCR_XCODE_VERSION=$(xcodebuild -version 2>/dev/null | head -1 || echo 'none')"
-    echo "CCR_HAS_MAKEFILE=$([ -f Makefile ] && echo 'yes' || echo 'no')"
-    echo "CCR_HAS_PACKAGE_JSON=$([ -f package.json ] && echo 'yes' || echo 'no')"
-    echo "CCR_HAS_PACKAGE_SWIFT=$([ -f Package.swift ] && echo 'yes' || echo 'no')"
-    echo "CCR_HAS_CARGO_TOML=$([ -f Cargo.toml ] && echo 'yes' || echo 'no')"
-    echo "CCR_HAS_REQUIREMENTS_TXT=$([ -f requirements.txt ] && echo 'yes' || echo 'no')"
-    echo "CCR_HAS_DOCKERFILE=$([ -f Dockerfile ] && echo 'yes' || echo 'no')"
-    echo "CCR_DISK_FREE=$(df -h . 2>/dev/null | tail -1 | awk '{print $4}')"
+    echo "WCR_CWD=$(pwd)"
+    echo "WCR_USER=$(whoami)"
+    echo "WCR_HOSTNAME=$(hostname -s 2>/dev/null || echo 'unknown')"
+    echo "WCR_SHELL=$SHELL"
+    echo "WCR_GIT_BRANCH=$(git branch --show-current 2>/dev/null || echo 'none')"
+    echo "WCR_GIT_STATUS=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
+    echo "WCR_GIT_REMOTE=$(git remote get-url origin 2>/dev/null || echo 'none')"
+    echo "WCR_GIT_DIRTY=$(git diff --quiet 2>/dev/null && echo 'clean' || echo 'dirty')"
+    echo "WCR_PYTHON_VENV=${VIRTUAL_ENV:-none}"
+    echo "WCR_CONDA_ENV=${CONDA_DEFAULT_ENV:-none}"
+    echo "WCR_NODE_VERSION=$(node -v 2>/dev/null || echo 'none')"
+    echo "WCR_NPM_VERSION=$(npm -v 2>/dev/null || echo 'none')"
+    echo "WCR_SWIFT_VERSION=$(swift --version 2>/dev/null | head -1 || echo 'none')"
+    echo "WCR_PYTHON_VERSION=$(python3 --version 2>/dev/null || echo 'none')"
+    echo "WCR_DOCKER_RUNNING=$(docker ps -q 2>/dev/null | wc -l | tr -d ' ')"
+    echo "WCR_RUBY_VERSION=$(ruby -v 2>/dev/null | head -1 || echo 'none')"
+    echo "WCR_GO_VERSION=$(go version 2>/dev/null || echo 'none')"
+    echo "WCR_RUST_VERSION=$(rustc --version 2>/dev/null || echo 'none')"
+    echo "WCR_XCODE_VERSION=$(xcodebuild -version 2>/dev/null | head -1 || echo 'none')"
+    echo "WCR_HAS_MAKEFILE=$([ -f Makefile ] && echo 'yes' || echo 'no')"
+    echo "WCR_HAS_PACKAGE_JSON=$([ -f package.json ] && echo 'yes' || echo 'no')"
+    echo "WCR_HAS_PACKAGE_SWIFT=$([ -f Package.swift ] && echo 'yes' || echo 'no')"
+    echo "WCR_HAS_CARGO_TOML=$([ -f Cargo.toml ] && echo 'yes' || echo 'no')"
+    echo "WCR_HAS_REQUIREMENTS_TXT=$([ -f requirements.txt ] && echo 'yes' || echo 'no')"
+    echo "WCR_HAS_DOCKERFILE=$([ -f Dockerfile ] && echo 'yes' || echo 'no')"
+    echo "WCR_DISK_FREE=$(df -h . 2>/dev/null | tail -1 | awk '{print $4}')"
     """
 
     return script
@@ -88,10 +88,13 @@ private func parseEnvironmentOutput(_ output: String, logger: Logger) -> String 
     var values: [String: String] = [:]
 
     for line in output.components(separatedBy: "\n") {
-        if line.hasPrefix("CCR_") {
+        if line.hasPrefix("WCR_") || line.hasPrefix("CCR_") {
             let parts = line.split(separator: "=", maxSplits: 1)
             if parts.count == 2 {
-                let key = String(parts[0]).replacingOccurrences(of: "CCR_", with: "")
+                let rawKey = String(parts[0])
+                let key = rawKey
+                    .replacingOccurrences(of: "WCR_", with: "")
+                    .replacingOccurrences(of: "CCR_", with: "")
                 values[key] = String(parts[1])
             }
         }

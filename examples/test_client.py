@@ -1,98 +1,97 @@
 #!/usr/bin/env python3
 """
-Example client for testing Claude Command Runner MCP Server
-This demonstrates how Claude Desktop could interact with the command receiver
+Minimal stdio MCP client for Warp Command Runner.
+
+This is the whole protocol: spawn the server, JSON-RPC on stdin/stdout.
+Any host (Warp, Claude Desktop, ChatGPT desktop, Cursor, a 40-line script)
+does the same thing. There is no Claude-specific handshake.
+
+Usage:
+  python3 examples/test_client.py /path/to/warp-command-runner
 """
 
+from __future__ import annotations
+
 import json
-import socket
+import os
+import subprocess
 import sys
 
-def send_command(host='127.0.0.1', port=9876, command_data=None):
-    """Send a command to the Claude Command Runner server"""
-    try:
-        # Create a socket connection
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((host, port))
-            
-            # Send the command
-            message = json.dumps(command_data) + '\n'
-            s.sendall(message.encode())
-            
-            # Receive the response
-            response = s.recv(4096).decode()
-            return json.loads(response.strip())
-            
-    except Exception as e:
-        return {"error": str(e)}
 
-def main():
-    """Example usage of the Claude Command Runner client"""
-    
-    print("Claude Command Runner - Example Client")
-    print("=====================================\n")
-    
-    # Test 1: Ping the server
-    print("1. Testing connection...")
-    response = send_command(command_data={"type": "ping"})
-    print(f"Response: {json.dumps(response, indent=2)}\n")
-    
-    # Test 2: Suggest a command
-    print("2. Requesting command suggestion...")
-    response = send_command(command_data={
-        "type": "suggest",
-        "query": "How do I list all files modified in the last 24 hours?"
-    })
-    print(f"Response: {json.dumps(response, indent=2)}\n")
-    
-    # Test 3: Execute a simple command
-    print("3. Executing a test command...")
-    response = send_command(command_data={
-        "type": "execute",
-        "command": "echo 'Hello from Claude Command Runner!'",
-        "working_directory": None
-    })
-    print(f"Response: {json.dumps(response, indent=2)}\n")
-    
-    # Interactive mode
-    print("Interactive Mode - Enter commands (type 'quit' to exit)")
-    print("Format: suggest <query> | execute <command> | ping")
-    print("-" * 50)
-    
-    while True:
-        try:
-            user_input = input("> ").strip()
-            
-            if user_input.lower() == 'quit':
-                break
-                
-            if user_input.lower() == 'ping':
-                response = send_command(command_data={"type": "ping"})
-                
-            elif user_input.startswith('suggest '):
-                query = user_input[8:]
-                response = send_command(command_data={
-                    "type": "suggest",
-                    "query": query
-                })
-                
-            elif user_input.startswith('execute '):
-                command = user_input[8:]
-                response = send_command(command_data={
-                    "type": "execute",
-                    "command": command
-                })
-            else:
-                print("Invalid command format. Use: suggest <query> | execute <command> | ping")
-                continue
-                
-            print(f"Response: {json.dumps(response, indent=2)}")
-            
-        except KeyboardInterrupt:
-            print("\nExiting...")
-            break
-        except Exception as e:
-            print(f"Error: {e}")
+def rpc(proc: subprocess.Popen, method: str, params: dict | None = None, msg_id: int = 1) -> dict:
+    payload = {"jsonrpc": "2.0", "id": msg_id, "method": method}
+    if params is not None:
+        payload["params"] = params
+    line = json.dumps(payload) + "\n"
+    assert proc.stdin is not None
+    proc.stdin.write(line)
+    proc.stdin.flush()
+    assert proc.stdout is not None
+    raw = proc.stdout.readline()
+    if not raw:
+        stderr = proc.stderr.read() if proc.stderr else b""
+        raise RuntimeError(f"server closed stdout. stderr={stderr!r}")
+    return json.loads(raw)
+
+
+def notify(proc: subprocess.Popen, method: str, params: dict | None = None) -> None:
+    payload = {"jsonrpc": "2.0", "method": method}
+    if params is not None:
+        payload["params"] = params
+    assert proc.stdin is not None
+    proc.stdin.write(json.dumps(payload) + "\n")
+    proc.stdin.flush()
+
+
+def main() -> int:
+    binary = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
+        os.path.dirname(__file__), "..", "warp-command-runner"
+    )
+    binary = os.path.abspath(binary)
+    if not os.path.isfile(binary):
+        print(f"Binary not found: {binary}", file=sys.stderr)
+        print("Build on macOS with ./build.sh, then pass the path to the executable.", file=sys.stderr)
+        return 1
+
+    print("Warp Command Runner — stdio MCP example")
+    print(f"Spawning {binary}\n")
+
+    proc = subprocess.Popen(
+        [binary],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        init = rpc(
+            proc,
+            "initialize",
+            {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "warp-command-runner-example", "version": "7.0.0"},
+            },
+            msg_id=1,
+        )
+        server = init.get("result", {}).get("serverInfo", {})
+        print(f"initialize → {server.get('name')} v{server.get('version')}")
+
+        notify(proc, "notifications/initialized")
+
+        listed = rpc(proc, "tools/list", {}, msg_id=2)
+        tools = listed.get("result", {}).get("tools", [])
+        names = [t.get("name") for t in tools]
+        print(f"tools/list → {len(names)} tools")
+        for name in names[:12]:
+            print(f"  - {name}")
+        if len(names) > 12:
+            print(f"  … {len(names) - 12} more")
+        return 0
+    finally:
+        proc.kill()
+        proc.wait(timeout=5)
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -8,7 +8,7 @@ import MCP
 ///
 /// Extracted from the now-deleted CommandReceiverService.swift in v6.0;
 /// the orphan TCP listener that shared that file was unreachable, but this
-/// wrapper is the live MCP transport entrypoint used by ClaudeCommandRunner.
+/// wrapper is the live MCP transport entrypoint used by WarpCommandRunner.
 struct MCPService: Service {
     let server: Server
     let transport: any Transport

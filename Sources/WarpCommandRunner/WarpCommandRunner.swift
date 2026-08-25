@@ -33,18 +33,19 @@ actor CommandResultsStore {
 let commandResultsStore = CommandResultsStore()
 
 @main
-struct ClaudeCommandRunner: AsyncParsableCommand {
+struct WarpCommandRunner: AsyncParsableCommand {
     /// Single source of truth for the version — previously "6.1.0", "v2.0"
     /// and "Version 2.0" coexisted across the server init, logs and help text.
-    static let version = "6.2.0"
+    static let version = AppIdentity.version
 
     static let configuration = CommandConfiguration(
-        commandName: "claude-command-runner",
-        abstract: "MCP server bridging Claude Desktop and Warp Terminal",
+        commandName: AppIdentity.commandName,
+        abstract: "MCP server that lets any MCP-capable AI (Grok, ChatGPT, Claude, Gemini, …) use your Warp terminal",
         discussion: """
-            Claude Command Runner acts as a bridge between Claude Desktop and Warp Terminal,
-            enabling Claude to suggest terminal commands that can be executed seamlessly
-            within Warp's Agent Mode.
+            Warp Command Runner is a Model Context Protocol server. Any MCP client —
+            Warp's agent, Claude Desktop, ChatGPT desktop, Cursor, VS Code, Continue,
+            Gemini CLI, and others — can spawn this binary over stdio and call its
+            tools. Commands run in Warp; the chat host can be whichever model you use.
 
             Version \(version)
             """,
@@ -76,7 +77,9 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
             return handler
         }
         
-        let logger = Logger(label: "com.claude.command-runner")
+        let logger = Logger(label: AppIdentity.loggerLabel)
+
+        AppPaths.migrateLegacyConfigIfNeeded(logger: logger)
         
         // Force database initialization at startup
         logger.info("Initializing database...")
@@ -116,14 +119,14 @@ struct ClaudeCommandRunner: AsyncParsableCommand {
         }
         
         if verbose {
-            logger.info("Starting Claude Command Runner MCP Server v\(Self.version)...")
+            logger.info("Starting Warp Command Runner MCP Server v\(Self.version)...")
             logger.info("Two-way communication: ENABLED")
             logger.info("Configuration loaded from: \(ConfigurationManager.configDirectoryPath)")
         }
 
         // Create the MCP server
         let server = Server(
-            name: "Claude Command Runner",
+            name: AppIdentity.displayName,
             version: Self.version,
             capabilities: .init(
                 tools: .init(listChanged: false)
@@ -1047,7 +1050,10 @@ func handleGetCommandOutput(params: CallTool.Parameters, logger: Logger) async -
         if commandId == "last" {
             let tempDir = "/tmp"
             outputFile = (try? FileManager.default.contentsOfDirectory(atPath: tempDir))?
-                .filter { $0.hasPrefix("claude_output_") && $0.hasSuffix(".json") }
+                .filter {
+                    ($0.hasPrefix(AppIdentity.outputPrefix) || $0.hasPrefix(AppIdentity.legacyOutputPrefix))
+                    && $0.hasSuffix(".json")
+                }
                 .compactMap { name -> (path: String, mtime: Date)? in
                     let path = "\(tempDir)/\(name)"
                     guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
@@ -1057,8 +1063,7 @@ func handleGetCommandOutput(params: CallTool.Parameters, logger: Logger) async -
                 .max(by: { $0.mtime < $1.mtime })?
                 .path
         } else {
-            let candidate = "/tmp/claude_output_\(commandId).json"
-            if FileManager.default.fileExists(atPath: candidate) { outputFile = candidate }
+            outputFile = TempFiles.existingOutputPath(commandId: commandId)
         }
 
         if let outputFile = outputFile {
@@ -1136,7 +1141,10 @@ func handleGetCommandOutput(params: CallTool.Parameters, logger: Logger) async -
         // List available output files for debugging
         let tempDir = "/tmp"
         let files = try? FileManager.default.contentsOfDirectory(atPath: tempDir)
-            .filter { $0.starts(with: "claude_output_") && $0.hasSuffix(".json") }
+            .filter {
+                ($0.hasPrefix(AppIdentity.outputPrefix) || $0.hasPrefix(AppIdentity.legacyOutputPrefix))
+                && $0.hasSuffix(".json")
+            }
             .sorted()
             .suffix(5)
 

@@ -1,9 +1,40 @@
 # Changelog
 
-All notable changes to Claude Command Runner will be documented in this file.
+All notable changes to Warp Command Runner will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [7.0.0] - 2026-08-25 — Warp Command Runner rebrand
+
+Formerly **Claude Command Runner**. Same MCP server; names and docs match how the protocol actually works.
+
+### Why this release exists
+
+The v6 binary already spoke standard MCP over stdio. Any local host (Warp Agent with Grok/GPT/Claude/Gemini, Claude Desktop, ChatGPT desktop, Cursor, VS Code, Continue, …) could call it. The product name still said "Claude", which hid that. v7.0 renames the project and records the compatibility boundary: **local MCP hosts yes, browser cloud chats no**.
+
+### Changed
+
+- Package, executable, Swift module, `.app` bundle, and MCP `serverInfo` name: `warp-command-runner` / **Warp Command Runner**
+- Bundle ID `com.m-pineapple.warp-command-runner` (v6 TCC grants on the old ID do not transfer — re-grant once)
+- Config/history directory `~/.warp-command-runner` (copies `~/.claude-command-runner` on first launch; old folder is not deleted)
+- Capture files `/tmp/wcr_*` (still reads leftover `/tmp/claude_*` from in-flight v6 commands)
+- Shell shim socket `/tmp/wcr-shell-shim-<uid>.sock`; installer replaces the v6 rc marker
+- `WCR_CODESIGN_IDENTITY` (the v6 `CCR_CODESIGN_IDENTITY` alias still works)
+- Docs and `config/` snippets for Warp, Claude Desktop, ChatGPT desktop, Cursor, VS Code, and generic stdio
+- New [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)
+
+### Migration
+
+1. Build v7, copy the bundle to `/Applications/Warp Command Runner.app`
+2. Change every MCP config key and path from `claude-command-runner` to `warp-command-runner`
+3. Re-grant Full Disk Access, Input Monitoring, Accessibility, and Automation for the new bundle
+4. Restart the host. Config and command history should already be in `~/.warp-command-runner`
+
+### Notes
+
+- This is **not** a remote/HTTPS MCP. Do not tunnel it to chatgpt.com / grok.com / claude.ai. Those sites cannot spawn stdio servers; exposing the terminal on the public internet would be unsafe.
+- Tool count and behavior are unchanged from 6.2.0.
 
 ## [6.2.0] - 2026-06-09 — full code audit: reliability, security ordering, real test suite
 
@@ -83,7 +114,7 @@ Once FDA is granted to the bundle (in addition to Automation, Input Monitoring, 
 
 - **README "🛡️ macOS Sequoia full setup recipe (the 7 ordered steps)"** — a new top-level section under Installation replacing the old "Stable code signing" section. Documents the empirically-verified procedure for getting the 5 keystroke-routing tools working on macOS Sequoia:
     1. Have an Apple Development cert (or self-signed Code Signing cert) in Keychain
-    2. `./build.sh` produces the `.app` bundle at `.build/release/claude-command-runner.app/`
+    2. `./build.sh` produces the `.app` bundle at `.build/release/warp-command-runner.app/`
     3. **Copy the bundle into `/Applications/`** (TCC refuses to prompt for bundles in dev directories — this was the second-to-last layer)
     4. Point Claude Desktop / Warp Agent config at the `/Applications/` bundle path
     5. `tccutil reset AppleEvents/ListenEvent/PostEvent/Accessibility` for the bundle ID
@@ -105,34 +136,34 @@ Once FDA is granted to the bundle (in addition to Automation, Input Monitoring, 
 
 v6.0.2 added stable code-signing to fix cdhash drift across rebuilds. That solved one layer of the TCC problem but uncovered the next: **modern macOS (Sequoia and later) silently denies TCC permission prompts for CLI binaries that lack an embedded `Info.plist` with `NSXxxUsageDescription` strings.** No dialog appears; no error in System Settings; just silent denial. The 5 keystroke-routing tools (`execute_command`, `execute_with_auto_retrieve`, `execute_with_streaming`, `run_template`, `send_to_session`) hit this. Hours of TCC-cleanup and re-grant cycles did not resolve it — the permission prompts the user needed to grant **were never being shown** because the binary had no Info.plist to drive them.
 
-Empirical confirmation from the live TCC log: `auth_value=1` (Unknown) on every request from `claude-command-runner` to `kTCCServiceListenEvent`, no `Prompting` entry ever appearing — the textbook silent-deny pattern for CLI binaries.
+Empirical confirmation from the live TCC log: `auth_value=1` (Unknown) on every request from `warp-command-runner` to `kTCCServiceListenEvent`, no `Prompting` entry ever appearing — the textbook silent-deny pattern for CLI binaries.
 
 ### Fixed
 
-- **`scripts/make-app-bundle.sh`** (new) wraps the built CLI binary in a proper `.app` bundle at `.build/release/claude-command-runner.app/`. The bundle structure is minimal — `Contents/MacOS/claude-command-runner` + `Contents/Info.plist`, no Resources, no icon. The `Info.plist` declares:
-    - `CFBundleIdentifier=com.m-pineapple.claude-command-runner` (stable, reverse-DNS, so TCC can target the bundle by identity rather than by cdhash)
+- **`scripts/make-app-bundle.sh`** (new) wraps the built CLI binary in a proper `.app` bundle at `.build/release/warp-command-runner.app/`. The bundle structure is minimal — `Contents/MacOS/warp-command-runner` + `Contents/Info.plist`, no Resources, no icon. The `Info.plist` declares:
+    - `CFBundleIdentifier=com.m-pineapple.warp-command-runner` (stable, reverse-DNS, so TCC can target the bundle by identity rather than by cdhash)
     - `LSUIElement=true` (don't show in Dock when launched — we're a CLI, not a UI app)
     - `NSAppleEventsUsageDescription`, `NSInputMonitoringUsageDescription`, `NSAccessibilityUsageDescription` — these are what macOS shows in the permission prompt; missing them = silent denial
-- **`build.sh`** now invokes `scripts/make-app-bundle.sh` after the binary is built (and code-signed if `CCR_CODESIGN_IDENTITY` is set). The bundle is signed as a unit when the env var is present.
-- **`config/claude-desktop-config.json`** and **`config/warp-agent-mcp.json`** updated to point at the binary inside the bundle: `.build/release/claude-command-runner.app/Contents/MacOS/claude-command-runner`. README + `docs/WARP_AGENT.md` follow.
+- **`build.sh`** now invokes `scripts/make-app-bundle.sh` after the binary is built (and code-signed if `WCR_CODESIGN_IDENTITY` is set). The bundle is signed as a unit when the env var is present.
+- **`config/claude-desktop-config.json`** and **`config/warp-agent-mcp.json`** updated to point at the binary inside the bundle: `.build/release/warp-command-runner.app/Contents/MacOS/warp-command-runner`. README + `docs/WARP_AGENT.md` follow.
 - **MCP `serverInfo.version` 6.0.2 → 6.0.3**.
 
 ### Changed (potentially breaking — see Migration)
 
-- **Recommended install path moved** from `.build/release/claude-command-runner` to `.build/release/claude-command-runner.app/Contents/MacOS/claude-command-runner`. The bare-binary path still exists (we keep a copy for backwards compat) and still works for the 34 tools that don't use keystroke routing. The 5 keystroke-routing tools require the bundle path.
+- **Recommended install path moved** from `.build/release/warp-command-runner` to `.build/release/warp-command-runner.app/Contents/MacOS/warp-command-runner`. The bare-binary path still exists (we keep a copy for backwards compat) and still works for the 34 tools that don't use keystroke routing. The 5 keystroke-routing tools require the bundle path.
 
 ### Migration (existing v6.0.x users)
 
-Edit your config files and **append `.app/Contents/MacOS/claude-command-runner`** to the existing path:
+Edit your config files and **append `.app/Contents/MacOS/warp-command-runner`** to the existing path:
 
 ```diff
--  "command": ".../claude-command-runner/.build/release/claude-command-runner",
-+  "command": ".../claude-command-runner/.build/release/claude-command-runner.app/Contents/MacOS/claude-command-runner",
+-  "command": ".../warp-command-runner/.build/release/warp-command-runner",
++  "command": ".../warp-command-runner/.build/release/warp-command-runner.app/Contents/MacOS/warp-command-runner",
 ```
 
 Restart Claude Desktop / Warp. On the next `execute_command`, macOS should **finally prompt** for AppleEvents / Input Monitoring permission — grant once and it sticks (combined with v6.0.2's stable signing, the grant survives future rebuilds).
 
-If you'd previously added the bare `claude-command-runner` binary to System Settings → Privacy & Security → Input Monitoring / Automation, those entries become orphans (different identity from the bundle). Safe to remove for hygiene; not required for functionality.
+If you'd previously added the bare `warp-command-runner` binary to System Settings → Privacy & Security → Input Monitoring / Automation, those entries become orphans (different identity from the bundle). Safe to remove for hygiene; not required for functionality.
 
 ### Notes
 
@@ -148,21 +179,21 @@ Live diagnosis on a user's machine revealed that the persistent "osascript is no
 
 1. The TCC service being denied is `kTCCServiceAppleEvents`, NOT `kTCCServiceAccessibility`. The error message's "keystrokes" wording is misleading; the actual gate failing is the AppleEvents/Automation permission.
 2. The binary is **ad-hoc signed** (Swift's default for `swift build`). Every rebuild produces a new `cdhash`. macOS treats each rebuild as a separate program for TCC purposes, orphaning the previous grant.
-3. The user's `System Settings → Privacy & Security → Automation` panel had **three separate `claude-command-runner` entries** — one per rebuild cycle — visually confirming the drift.
+3. The user's `System Settings → Privacy & Security → Automation` panel had **three separate `warp-command-runner` entries** — one per rebuild cycle — visually confirming the drift.
 4. Claude Desktop spawns the MCP server via Apple's `responsibility_spawnattrs_setdisclaim` helper (`/Applications/Claude.app/Contents/Helpers/disclaimer`), which deliberately prevents Claude.app's TCC grants from propagating to the child. So granting Claude.app permissions doesn't help; the child binary's own identity is what TCC checks.
 
 **Every user who ever rebuilds this project hits this.** The first install works (TCC prompts, user grants). The first `git pull && ./build.sh` silently breaks it. Until v6.0.2, the only "fix" was to re-grant after every rebuild — tedious and confusing.
 
 ### Fixed
 
-- **build.sh now supports stable code signing via `CCR_CODESIGN_IDENTITY` env var.** When set, the binary is signed with the user's chosen certificate (typically a self-signed cert from Keychain Access). Resulting cdhash is **stable across rebuilds**. Grant TCC once, it persists indefinitely. Opt-in to preserve backwards compatibility — unset means ad-hoc behavior unchanged from v6.0.x.
+- **build.sh now supports stable code signing via `WCR_CODESIGN_IDENTITY` env var.** When set, the binary is signed with the user's chosen certificate (typically a self-signed cert from Keychain Access). Resulting cdhash is **stable across rebuilds**. Grant TCC once, it persists indefinitely. Opt-in to preserve backwards compatibility — unset means ad-hoc behavior unchanged from v6.0.x.
 - **build.sh: dropped stale `--port 9876` invocation hint** from the post-build install instructions (the TCP listener was deleted in Tier A of v6.0.0).
 - **build.sh: updated install hint** to point at both Claude Desktop and Warp Agent config paths (was Warp-only and outdated).
 - **MCP `serverInfo.version` 6.0.1 → 6.0.2**.
 
 ### Documentation
 
-- **README "Stable code signing" section** added under Installation (after the optional shell shim step). Explains the cdhash-drift problem in 3 sentences, the 5-step Keychain Access cert-generation flow, the `CCR_CODESIGN_IDENTITY` env var, verification command, and the `execute_pipeline` fallback for users who'd rather not sign.
+- **README "Stable code signing" section** added under Installation (after the optional shell shim step). Explains the cdhash-drift problem in 3 sentences, the 5-step Keychain Access cert-generation flow, the `WCR_CODESIGN_IDENTITY` env var, verification command, and the `execute_pipeline` fallback for users who'd rather not sign.
 - **CHANGELOG v6.0.2 entry** (this one) captures the empirical TCC log evidence so future readers don't have to re-do the investigation.
 
 ### Migration
@@ -170,15 +201,15 @@ Live diagnosis on a user's machine revealed that the persistent "osascript is no
 For existing users hitting the TCC stuckness:
 
 1. Generate a self-signed code-signing cert in Keychain Access (5 steps, see README)
-2. `export CCR_CODESIGN_IDENTITY="claude-command-runner"` (or whatever you named the cert)
+2. `export WCR_CODESIGN_IDENTITY="warp-command-runner"` (or whatever you named the cert)
 3. `./build.sh`
-4. Remove all stale `claude-command-runner` entries from `System Settings → Privacy & Security → Automation`
+4. Remove all stale `warp-command-runner` entries from `System Settings → Privacy & Security → Automation`
 5. Restart Claude Desktop
 6. Trigger an `execute_command` → TCC prompts fresh → grant → done. Permanent until you replace the cert.
 
 ### Notes
 
-- No behavior change for users who don't set `CCR_CODESIGN_IDENTITY` — backwards-compatible.
+- No behavior change for users who don't set `WCR_CODESIGN_IDENTITY` — backwards-compatible.
 - Tool count unchanged: 39.
 - No API changes.
 
@@ -189,7 +220,7 @@ Three real findings surfaced from the v6.0.0 live verification, plus one already
 ### Fixed
 
 - **`execute_and_parse` git_status parser** garbled output for human-readable input. The parser was hardcoded for `git status --porcelain` (2-char status code at line start) and would treat the first character of every prose line as a status code — producing nonsense like `Staged: 3 file(s) • O branch main` for actual `git status` output. v6.0.1 now detects format (presence of "On branch", "HEAD detached", "Changes to be committed", etc.) and dispatches to a human-format parser or the existing porcelain parser. Output for both formats is now correct.
-- **`Configuration` decoder** failed loudly with `keyNotFound` errors when an existing on-disk `~/.claude-command-runner/config.json` predated one or more top-level schema fields (e.g. `security`). Swift's auto-synthesized `Codable` init uses `decode` (not `decodeIfPresent`) and ignores property defaults. v6.0.1 adds a custom `init(from:)` to `Configuration` that uses `decodeIfPresent ?? <default>` for every top-level field. Old configs continue to load without error logs; new fields silently fall back to defaults.
+- **`Configuration` decoder** failed loudly with `keyNotFound` errors when an existing on-disk `~/.warp-command-runner/config.json` predated one or more top-level schema fields (e.g. `security`). Swift's auto-synthesized `Codable` init uses `decode` (not `decodeIfPresent`) and ignores property defaults. v6.0.1 adds a custom `init(from:)` to `Configuration` that uses `decodeIfPresent ?? <default>` for every top-level field. Old configs continue to load without error logs; new fields silently fall back to defaults.
 - **MCP `serverInfo.version`** was hardcoded to `"5.0.0"`. v6.0.1 reports `"6.0.1"`. (Already fixed on `main` between v6.0.0 and v6.0.1; rolled into this tag.)
 
 ### Documentation
@@ -208,7 +239,7 @@ This release is a **re-pivot back to Warp Terminal**, triggered by Warp going op
 
 ### Headline
 
-`claude-command-runner` is now a **dual-consumer MCP server**: the same binary serves both Claude Desktop and Warp's built-in agent. Same code, same tools, just two consumers. See [`docs/WARP_AGENT.md`](docs/WARP_AGENT.md) for the new install path.
+`warp-command-runner` is now a **dual-consumer MCP server**: the same binary serves both Claude Desktop and Warp's built-in agent. Same code, same tools, just two consumers. See [`docs/WARP_AGENT.md`](docs/WARP_AGENT.md) for the new install path.
 
 ### Added
 
@@ -292,7 +323,7 @@ Warp is AGPL-3.0. Our MCP communicates with Warp over IPC (`warp://` URLs and OS
 
 - **Environment Snapshots** (`capture_environment`, `diff_environment`): Capture named snapshots of all environment variables and diff any two snapshots to see additions, removals, and changes.
 
-- **Workspace Profiles** (`save_workspace_profile`, `load_workspace_profile`, `list_workspace_profiles`, `delete_workspace_profile`): Save and restore project contexts including working directory, environment variables, default commands, and terminal preference. Stored at `~/.claude-command-runner/profiles.json`.
+- **Workspace Profiles** (`save_workspace_profile`, `load_workspace_profile`, `list_workspace_profiles`, `delete_workspace_profile`): Save and restore project contexts including working directory, environment variables, default commands, and terminal preference. Stored at `~/.warp-command-runner/profiles.json`.
 
 - **Multi-Terminal Sessions** (`open_terminal_tab`, `send_to_session`, `list_sessions`, `close_session`): Orchestrate multiple named terminal tabs. Open tabs, send commands to specific sessions, and manage the session lifecycle.
 
@@ -300,7 +331,7 @@ Warp is AGPL-3.0. Our MCP communicates with Warp over IPC (`warp://` URLs and OS
 
 - **File System Watchers** (`add_file_watch`, `remove_file_watch`, `list_file_watches`): Watch directories for file changes using FSEvents. Trigger commands automatically with configurable glob patterns and debounce. Max 5 concurrent watchers with auto-expiry.
 
-- **SSH Remote Execution** (`ssh_execute`, `save_ssh_profile`, `list_ssh_profiles`, `delete_ssh_profile`): Run commands on remote hosts via SSH key authentication. Connection profiles stored at `~/.claude-command-runner/ssh_profiles.json`. Key-only auth by default for security.
+- **SSH Remote Execution** (`ssh_execute`, `save_ssh_profile`, `list_ssh_profiles`, `delete_ssh_profile`): Run commands on remote hosts via SSH key authentication. Connection profiles stored at `~/.warp-command-runner/ssh_profiles.json`. Key-only auth by default for security.
 
 ### Changed
 - Version bumped from 4.1.0 to 5.0.0
@@ -310,7 +341,7 @@ Warp is AGPL-3.0. Our MCP communicates with Warp over IPC (`warp://` URLs and OS
 
 ### Technical
 - 8 new source files: `ClipboardBridge.swift`, `EnvironmentContext.swift`, `OutputParsers.swift`, `EnvironmentSnapshot.swift`, `WorkspaceProfiles.swift`, `TerminalSessions.swift`, `FileWatcher.swift`, `SSHExecution.swift`
-- Modified: `CommandHandlers.swift` (interactive detection), `NotificationSupport.swift` (real macOS notifications), `Configuration.swift` (new config sections + validation), `ClaudeCommandRunner.swift` (tool registration)
+- Modified: `CommandHandlers.swift` (interactive detection), `NotificationSupport.swift` (real macOS notifications), `Configuration.swift` (new config sections + validation), `WarpCommandRunner.swift` (tool registration)
 - All new features use Foundation/AppKit — no new external dependencies
 - Actor-based concurrency for thread-safe state management (EnvironmentStore, FileWatcher, SessionManager, SSHProfileStore)
 
@@ -332,7 +363,7 @@ Warp is AGPL-3.0. Our MCP communicates with Warp over IPC (`warp://` URLs and OS
   - Returns overall health status with warnings
 
 - **Auto Temp Cleanup**: Automatic cleanup of orphaned temp files on startup
-  - Removes `claude_output_*`, `claude_stream_*`, `claude_script_*` files older than 24 hours
+  - Removes `wcr_output_*`, `wcr_stream_*`, `wcr_script_*` files older than 24 hours
   - Prevents `/tmp` pollution from interrupted sessions
   - Logs cleanup statistics
 
@@ -373,7 +404,7 @@ Warp is AGPL-3.0. Our MCP communicates with Warp over IPC (`warp://` URLs and OS
   - `run_template` - Execute templates with variable substitution
   - `list_templates` - View all saved templates
   - Category organization
-  - Templates stored in `~/.claude-command-runner/templates.json`
+  - Templates stored in `~/.warp-command-runner/templates.json`
 
 ### Changed
 - Version bumped to 4.0.0
@@ -400,7 +431,7 @@ Warp is AGPL-3.0. Our MCP communicates with Warp over IPC (`warp://` URLs and OS
 ### Added
 - **Standard Warp Terminal Support**: Full compatibility with production Warp Terminal (not just Preview)
 - **Terminal Auto-Detection**: Automatically detects and configures available terminals
-- **Configuration System**: Comprehensive config file at `~/.claude-command-runner/config.json`
+- **Configuration System**: Comprehensive config file at `~/.warp-command-runner/config.json`
 - **Config Manager Tool**: CLI utility for managing configuration
 
 - **Installation Script**: Automated setup with `install.sh`
@@ -498,7 +529,7 @@ Warp is AGPL-3.0. Our MCP communicates with Warp over IPC (`warp://` URLs and OS
 ### From 2.1 to 2.2
 1. Update configuration path from Warp Preview to standard Warp
 2. Run `./install.sh` to set up new configuration system
-3. Review and customize `~/.claude-command-runner/config.json`
+3. Review and customize `~/.warp-command-runner/config.json`
 4. Update Claude Desktop configuration if needed
 
 ### From 2.0 to 2.1

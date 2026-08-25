@@ -1,7 +1,7 @@
 import XCTest
 import Foundation
 import MCP
-@testable import ClaudeCommandRunner
+@testable import WarpCommandRunner
 
 // MARK: - Interactive command detection
 
@@ -312,14 +312,14 @@ final class OutputCaptureScriptTests: XCTestCase {
         try script.write(toFile: scriptPath, atomically: true, encoding: .utf8)
         defer {
             try? FileManager.default.removeItem(atPath: scriptPath)
-            try? FileManager.default.removeItem(atPath: "/tmp/claude_output_\(commandId).json")
-            try? FileManager.default.removeItem(atPath: "/tmp/claude_output_\(commandId).json.complete")
+            try? FileManager.default.removeItem(atPath: "/tmp/wcr_output_\(commandId).json")
+            try? FileManager.default.removeItem(atPath: "/tmp/wcr_output_\(commandId).json.complete")
         }
 
         let run = try await runProcess(executablePath: "/bin/bash", arguments: [scriptPath], timeout: 30)
         XCTAssertEqual(run.exitCode, 7, "Capture script must propagate the command's exit code")
 
-        let data = try Data(contentsOf: URL(fileURLWithPath: "/tmp/claude_output_\(commandId).json"))
+        let data = try Data(contentsOf: URL(fileURLWithPath: "/tmp/wcr_output_\(commandId).json"))
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let result = try decoder.decode(CommandExecutionResult.self, from: data)
@@ -327,5 +327,42 @@ final class OutputCaptureScriptTests: XCTestCase {
         XCTAssertEqual(result.commandId, commandId)
         XCTAssertEqual(result.exitCode, 7)
         XCTAssertTrue(result.output.contains(#"tricky "quoted" → unicode"#))
+    }
+}
+
+// MARK: - Product identity (v7 rebrand)
+
+final class AppIdentityTests: XCTestCase {
+
+    func testPublicNameHasNoClaudeProductBranding() {
+        XCTAssertEqual(AppIdentity.displayName, "Warp Command Runner")
+        XCTAssertEqual(AppIdentity.commandName, "warp-command-runner")
+        XCTAssertEqual(AppIdentity.bundleIdentifier, "com.m-pineapple.warp-command-runner")
+        XCTAssertEqual(AppIdentity.version, "7.0.0")
+        XCTAssertFalse(AppIdentity.commandName.contains("claude"))
+        XCTAssertFalse(AppIdentity.bundleIdentifier.contains("claude"))
+        XCTAssertFalse(AppIdentity.configDirectoryName.contains("claude"))
+    }
+
+    func testLegacyPathsAreRememberedForMigration() {
+        XCTAssertEqual(AppIdentity.legacyConfigDirectoryName, ".claude-command-runner")
+        XCTAssertEqual(AppIdentity.legacyDatabaseFileName, "claude_commands.db")
+        XCTAssertEqual(AppIdentity.legacyOutputPrefix, "claude_output_")
+        XCTAssertEqual(AppIdentity.legacyScriptPrefix, "claude_script_")
+    }
+
+    func testTempFileHelpersUseCurrentPrefix() {
+        XCTAssertEqual(TempFiles.outputPath(commandId: "abc"), "/tmp/wcr_output_abc.json")
+        XCTAssertEqual(TempFiles.scriptPath(commandId: "abc"), "/tmp/wcr_script_abc.sh")
+        XCTAssertEqual(TempFiles.streamLogPath(commandId: "abc"), "/tmp/wcr_stream_abc.log")
+        let needles = TempFiles.scriptNeedle(commandId: "abc")
+        XCTAssertTrue(needles.contains("wcr_script_abc"))
+        XCTAssertTrue(needles.contains("claude_script_abc"))
+    }
+
+    func testTempFilePrefixesCoverLegacyCaptureFiles() {
+        XCTAssertTrue(AppIdentity.tempFilePrefixes.contains("wcr_output_"))
+        XCTAssertTrue(AppIdentity.tempFilePrefixes.contains("claude_output_"))
+        XCTAssertTrue(AppIdentity.tempFilePrefixes.contains("claude_script_"))
     }
 }

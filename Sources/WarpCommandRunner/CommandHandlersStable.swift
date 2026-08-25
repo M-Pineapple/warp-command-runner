@@ -100,7 +100,7 @@ func handleExecuteCommandV2NoMonitoring(params: CallTool.Parameters, logger: Log
 
     // Create the output capture script
     let scriptContent = createOutputCaptureScript(command: fullCommand, commandId: commandId)
-    let tempScriptFile = "/tmp/claude_script_\(commandId).sh"
+    let tempScriptFile = TempFiles.scriptPath(commandId: commandId)
 
     do {
         try scriptContent.write(toFile: tempScriptFile, atomically: true, encoding: .utf8)

@@ -10,7 +10,7 @@ import Logging
 /// Warp's terminal parser decodes the payload as JSON and routes it to its
 /// cli-agent notification UI (see `app/src/terminal/view.rs`).
 ///
-/// Since our MCP server's stdout is the JSON-RPC channel with Claude Desktop,
+/// Since our MCP server's stdout is the JSON-RPC channel with the host,
 /// we cannot emit OSC sequences directly to Warp's PTY. Instead this emitter
 /// builds a `printf` invocation that the caller arranges to run *inside* a
 /// Warp pane (via the existing AppleScript keystroke path used by

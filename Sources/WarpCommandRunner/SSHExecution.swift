@@ -8,7 +8,7 @@ import Logging
 /// Uses the system `ssh` binary — no protocol implementation needed.
 /// Key-based authentication only; passwords are never stored.
 ///
-/// Feature #10 — extends Claude's reach beyond localhost.
+/// Feature #10 — extends the model's reach beyond localhost.
 /// Example: "Run `df -h` on my staging server"
 
 // MARK: - SSH Profile
@@ -53,8 +53,7 @@ actor SSHProfileStore {
     private let profilesURL: URL
 
     private init() {
-        let configDir = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".claude-command-runner")
+        let configDir = AppPaths.configDirectory
         let url = configDir.appendingPathComponent("ssh_profiles.json")
         self.profilesURL = url
 
@@ -120,7 +119,7 @@ actor SSHProfileStore {
         } catch {
             // Best-effort persistence, but never silent: a failed write means
             // profile changes are lost on restart.
-            Logger(label: "com.claude.command-runner.ssh")
+            Logger(label: "com.warp-command-runner.ssh")
                 .error("Failed to persist SSH profiles to \(profilesURL.path): \(error)")
         }
     }

@@ -1,26 +1,21 @@
 #!/usr/bin/env bash
 # helper/uninstall-shim.sh
 #
-# Removes the claude-command-runner shell shim block from the user's shell
-# rc file(s). Idempotent — safe to run multiple times. Does not modify
-# unrelated lines.
+# Removes the warp-command-runner shell shim block (and the v6
+# claude-command-runner marker, if still present) from the user's shell
+# rc file(s). Idempotent — safe to run multiple times.
 
 set -euo pipefail
 
-readonly MARKER_BEGIN="# >>> claude-command-runner shell shim >>>"
-readonly MARKER_END="# <<< claude-command-runner shell shim <<<"
-
 remove_block() {
-    local rc_file="$1"
+    local rc_file="$1" begin="$2" end="$3"
     [[ -f "$rc_file" ]] || return 0
-    if ! grep -qF "$MARKER_BEGIN" "$rc_file"; then
+    if ! grep -qF "$begin" "$rc_file"; then
         return 0
     fi
-    # Use a portable sed approach: print everything except lines between
-    # the markers (inclusive). awk is more reliable than sed across BSD/GNU.
     local tmp
     tmp="$(mktemp)"
-    awk -v begin="$MARKER_BEGIN" -v end="$MARKER_END" '
+    awk -v begin="$begin" -v end="$end" '
         $0 == begin { in_block = 1; next }
         $0 == end   { in_block = 0; next }
         !in_block   { print }
@@ -29,7 +24,9 @@ remove_block() {
     echo "uninstall-shim: removed marker block from $rc_file"
 }
 
-remove_block "$HOME/.zshrc"
-remove_block "$HOME/.bashrc"
+for rc in "$HOME/.zshrc" "$HOME/.bashrc"; do
+    remove_block "$rc" "# >>> warp-command-runner shell shim >>>" "# <<< warp-command-runner shell shim <<<"
+    remove_block "$rc" "# >>> claude-command-runner shell shim >>>" "# <<< claude-command-runner shell shim <<<"
+done
 
 echo "uninstall-shim: done. Open a new shell to fully clear."

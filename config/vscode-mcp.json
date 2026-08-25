@@ -1,0 +1,10 @@
+{
+  "_comment": "VS Code Copilot MCP — save as .vscode/mcp.json in a workspace, or in your user MCP settings. VS Code uses `servers` rather than `mcpServers`.",
+  "servers": {
+    "warp-command-runner": {
+      "type": "stdio",
+      "command": "/Applications/Warp Command Runner.app/Contents/MacOS/warp-command-runner",
+      "args": []
+    }
+  }
+}

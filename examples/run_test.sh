@@ -1,14 +1,27 @@
 #!/bin/bash
+# Spawn warp-command-runner over stdio and list tools (MCP initialize + tools/list).
+set -euo pipefail
 
-# Make the test client executable
-chmod +x test_client.py
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+BINARY="${1:-}"
 
-# Ensure the server is running
-echo "Please ensure the Claude Command Runner MCP server is running on port 9876"
-echo "You can start it with: swift run claude-command-runner --verbose"
-echo ""
-echo "Press Enter to continue with the test..."
-read
+if [[ -z "$BINARY" ]]; then
+    for candidate in \
+        "$ROOT/warp-command-runner" \
+        "$ROOT/.build/release/warp-command-runner" \
+        "/Applications/Warp Command Runner.app/Contents/MacOS/warp-command-runner"
+    do
+        if [[ -x "$candidate" ]]; then
+            BINARY="$candidate"
+            break
+        fi
+    done
+fi
 
-# Run the test client
-python3 test_client.py
+if [[ -z "${BINARY:-}" || ! -x "$BINARY" ]]; then
+    echo "No warp-command-runner binary found."
+    echo "Build on macOS with ./build.sh, then: $0 /path/to/warp-command-runner"
+    exit 1
+fi
+
+python3 "$ROOT/examples/test_client.py" "$BINARY"

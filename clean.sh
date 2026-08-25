@@ -24,9 +24,9 @@ if [ -f "Package.resolved" ]; then
 fi
 
 # Remove any symlinks
-if [ -L "claude-command-runner" ]; then
+if [ -L "warp-command-runner" ]; then
     echo "Removing symlink..."
-    rm -f claude-command-runner
+    rm -f warp-command-runner
 fi
 
 echo ""

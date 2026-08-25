@@ -193,8 +193,7 @@ func handleDiffEnvironment(params: CallTool.Parameters, logger: Logger) async ->
 // MARK: - Persistence
 
 private func persistSnapshot(_ snapshot: EnvironmentSnapshotData, logger: Logger) {
-    let dir = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".claude-command-runner")
+    let dir = AppPaths.configDirectory
         .appendingPathComponent("snapshots")
 
     try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -214,7 +213,7 @@ private func persistSnapshot(_ snapshot: EnvironmentSnapshotData, logger: Logger
 
 /// Capture the user's actual interactive-login shell environment.
 ///
-/// The MCP server runs as a child of Claude Desktop, so its own environment is
+/// The MCP server runs as a child of whichever MCP host spawned it, so its own environment is
 /// a minimal inherited set (often ~9 vars, CWD `/`). To represent what the
 /// user's terminal actually sees, we spawn their login + interactive shell
 /// (`$SHELL -l -i -c env`), which sources ~/.zprofile, ~/.zshrc, etc. A watchdog

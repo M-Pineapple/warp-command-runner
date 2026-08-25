@@ -4,14 +4,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "claude-command-runner",
+    name: "warp-command-runner",
     platforms: [
         .macOS(.v13)
     ],
     products: [
         .executable(
-            name: "claude-command-runner",
-            targets: ["ClaudeCommandRunner"]
+            name: "warp-command-runner",
+            targets: ["WarpCommandRunner"]
         ),
         .executable(
             name: "ConfigManager",
@@ -27,7 +27,7 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "ClaudeCommandRunner",
+            name: "WarpCommandRunner",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "MCP", package: "swift-sdk"),
@@ -45,8 +45,8 @@ let package = Package(
             dependencies: []
         ),
         .testTarget(
-            name: "ClaudeCommandRunnerTests",
-            dependencies: ["ClaudeCommandRunner"]
+            name: "WarpCommandRunnerTests",
+            dependencies: ["WarpCommandRunner"]
         ),
     ]
 )

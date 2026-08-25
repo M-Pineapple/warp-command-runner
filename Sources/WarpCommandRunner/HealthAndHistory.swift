@@ -212,8 +212,7 @@ private func checkDatabaseHealth() -> (status: String, detail: String) {
     _ = DatabaseManager.shared.getRecentCommands(limit: 1)
 
     // Get database file info
-    let homeDir = FileManager.default.homeDirectoryForCurrentUser
-    let dbPath = homeDir.appendingPathComponent(".claude-command-runner/claude_commands.db").path
+    let dbPath = AppPaths.databaseURL.path
     
     guard FileManager.default.fileExists(atPath: dbPath) else {
         return ("❌", "Database file not found")
@@ -275,7 +274,7 @@ private func checkTempDirectory() -> (status: String, detail: String) {
     let tempDir = "/tmp"
     
     // Check writability
-    let testFile = "\(tempDir)/claude_health_check_\(UUID().uuidString)"
+    let testFile = "\(tempDir)/wcr_health_check_\(UUID().uuidString)"
     do {
         try "test".write(toFile: testFile, atomically: true, encoding: .utf8)
         try FileManager.default.removeItem(atPath: testFile)
@@ -283,15 +282,17 @@ private func checkTempDirectory() -> (status: String, detail: String) {
         return ("❌", "Cannot write to /tmp: \(error.localizedDescription)")
     }
     
-    // Count orphaned claude files
+    // Count leftover capture files from this MCP (current + v6 prefixes)
     do {
         let files = try FileManager.default.contentsOfDirectory(atPath: tempDir)
-        let claudeFiles = files.filter { $0.hasPrefix("claude_") }
+        let ours = files.filter { name in
+            AppIdentity.tempFilePrefixes.contains(where: { name.hasPrefix($0) })
+        }
         
-        if claudeFiles.count > 50 {
-            return ("⚠️", "Writable (\(claudeFiles.count) orphaned files - run cleanup)")
-        } else if claudeFiles.count > 0 {
-            return ("✅", "Writable (\(claudeFiles.count) temp files)")
+        if ours.count > 50 {
+            return ("⚠️", "Writable (\(ours.count) orphaned files - run cleanup)")
+        } else if ours.count > 0 {
+            return ("✅", "Writable (\(ours.count) temp files)")
         } else {
             return ("✅", "Writable (clean)")
         }
@@ -334,11 +335,7 @@ func performTempCleanup(logger: Logger) {
     let maxAge: TimeInterval = 24 * 60 * 60 // 24 hours
     let now = Date()
     
-    let patterns = [
-        "claude_output_",
-        "claude_stream_",
-        "claude_script_"
-    ]
+    let patterns = AppIdentity.tempFilePrefixes
     
     var cleanedCount = 0
     var cleanedBytes: Int64 = 0

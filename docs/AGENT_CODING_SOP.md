@@ -1,7 +1,7 @@
-# Coding-Agent SOP — governance prompt for any AI agent running via CCR
+# Coding-Agent SOP — governance prompt for any AI agent running via WCR
 
 **Purpose:** the standing operating procedure for ANY AI agent (Grok in Warp/Wave,
-Claude, or other) doing software work through Claude Command Runner. Paste this as
+Claude, or other) doing software work through Warp Command Runner. Paste this as
 the agent's system prompt / Warp Rule, and seed every new project with the
 per-project template at the bottom. Distilled from the CurrentTrader Pro
 engineering practice (Fable, 2026) — the practices below each exist because their
@@ -158,7 +158,7 @@ already records (code structure, git history) — store the non-obvious.
 ```markdown
 # <Project> — agent context
 
-Read this first. SOP: claude-command-runner/docs/AGENT_CODING_SOP.md governs.
+Read this first. SOP: warp-command-runner/docs/AGENT_CODING_SOP.md governs.
 
 ## Ceremony
 - Build: <command(s) — both build systems if an app target exists>

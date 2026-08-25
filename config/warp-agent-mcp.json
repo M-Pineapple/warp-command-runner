@@ -1,8 +1,8 @@
 {
-  "_comment": "v6.0.3+: register claude-command-runner with Warp's native agent panel. Path now points INSIDE the .app bundle — the .app wrapper carries the Info.plist with NSAppleEventsUsageDescription / NSInputMonitoringUsageDescription that macOS needs to prompt for TCC permissions. Save this content to ~/.warp/.mcp.json (or merge with an existing one).",
+  "_comment": "Warp Agent — ~/.warp/.mcp.json. Warp's agent uses whichever LLM you configured (Grok, Claude, GPT, Gemini, …). Merge into an existing mcpServers object if you already have one.",
   "mcpServers": {
-    "claude-command-runner": {
-      "command": "/Users/username/yourfilepath/claude-command-runner/.build/release/claude-command-runner.app/Contents/MacOS/claude-command-runner",
+    "warp-command-runner": {
+      "command": "/Applications/Warp Command Runner.app/Contents/MacOS/warp-command-runner",
       "args": []
     }
   }

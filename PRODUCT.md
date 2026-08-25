@@ -1,6 +1,19 @@
-# PRODUCT.md — claude-command-runner v6.0
+# PRODUCT.md — Warp Command Runner v7.0
 
-**Status:** Draft (2026-05-07)
+**Status:** Shipped (2026-08-25)
+**Replaces:** Claude Command Runner v6.2.0
+
+v7.0 is a **rebrand**, not a rewrite. The MCP server, 40 tools, Warp deeplinks, and stdio transport are the v6 engine. The product name, identifiers, and docs now describe what the code already was: a host-agnostic MCP that drives Warp, usable from Grok / ChatGPT / Claude / Gemini as long as the *app* speaking MCP is a local host.
+
+See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the honest "can any cloud AI add this?" answer.
+
+The v6.0 notes below are historical (Warp pivot). They still describe the architecture.
+
+---
+
+# Historical: warp-command-runner v6.0
+
+**Status:** Draft (2026-05-07) — kept as design record
 **Branch:** `v6.0-warp-pivot`
 **Replaces:** v5.0.0
 
@@ -11,7 +24,7 @@
 Warp Terminal went open source under AGPL-3.0 in early May 2026 (`https://github.com/warpdotdev/warp`). That triggered three things:
 
 1. We can finally **prove** what surfaces Warp does and does not expose to external integrators, instead of probing AppleScript and clipboard behaviour by hand.
-2. We discovered Warp's **native agent panel** is a full MCP client that loads servers from `~/.warp/.mcp.json` — meaning `claude-command-runner` can serve **two consumers** with the same code: Claude Desktop (over stdio) and Warp's own agent (over the MCP protocol Warp speaks internally).
+2. We discovered Warp's **native agent panel** is a full MCP client that loads servers from `~/.warp/.mcp.json` — meaning `warp-command-runner` can serve **two consumers** with the same code: Claude Desktop (over stdio) and Warp's own agent (over the MCP protocol Warp speaks internally).
 3. We can identify and remove **dead code** with confidence, replace **fragile AppleScript** paths with `warp://` deeplinks where Warp ships a real entrypoint, and add a **structured event channel** (OSC 777) into Warp's UI that didn't previously exist for us.
 
 v6.0 ships all of the above as a **single coordinated release**. No partial bundles, no incremental punts — one cleanup, one re-architecture, one re-launch.
@@ -24,13 +37,13 @@ Two distinct user journeys after v6.0:
 
 ### Journey A — "I drive Claude Desktop, and Claude reaches into my terminal"
 
-Unchanged in spirit from v5. The user is in Claude Desktop. Claude needs to run shell commands. `claude-command-runner` is registered in `claude_desktop_config.json`. Claude calls tools; commands appear in (and produce output through) Warp.
+Unchanged in spirit from v5. The user is in Claude Desktop. Claude needs to run shell commands. `warp-command-runner` is registered in `claude_desktop_config.json`. Claude calls tools; commands appear in (and produce output through) Warp.
 
 **What changes:** the bridging is less fragile. Tab opening uses Warp's native deeplink instead of clicking menu items. Status events become visible in Warp's own UI rather than being invisible state inside the MCP.
 
 ### Journey B — "I'm in Warp, and I'm chatting with Warp's agent, which uses my MCP"
 
-**New in v6.0.** The user opens Warp's native agent panel (the one above the terminal, not the cli-agent footer). They type a question. Warp's configured LLM (Claude Sonnet, Opus, GPT, etc.) decides whether to call any of `claude-command-runner`'s 36+ tools. Output renders inline in Warp's chat. The LLM's reply renders inline. The conversation stays in Warp.
+**New in v6.0.** The user opens Warp's native agent panel (the one above the terminal, not the cli-agent footer). They type a question. Warp's configured LLM (Claude Sonnet, Opus, GPT, etc.) decides whether to call any of `warp-command-runner`'s 36+ tools. Output renders inline in Warp's chat. The LLM's reply renders inline. The conversation stays in Warp.
 
 The user's MCP **is the integration layer** — same tools, same code path on the server, but now the consumer is Warp's agent rather than Claude Desktop. Configuration is `~/.warp/.mcp.json`.
 
@@ -63,7 +76,7 @@ The "Claude" in Journey B is **whichever model is configured in Warp**, *not* th
 
 ### D. Warp Agent integration (headline)
 
-**New install path:** documented and supported registration in `~/.warp/.mcp.json`. Once registered, every `claude-command-runner` tool is callable by Warp's native agent.
+**New install path:** documented and supported registration in `~/.warp/.mcp.json`. Once registered, every `warp-command-runner` tool is callable by Warp's native agent.
 
 | Tool category (24 of 36 tools) | Behavior in Warp Agent |
 |---|---|
