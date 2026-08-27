@@ -338,7 +338,7 @@ final class AppIdentityTests: XCTestCase {
         XCTAssertEqual(AppIdentity.displayName, "Warp Command Runner")
         XCTAssertEqual(AppIdentity.commandName, "warp-command-runner")
         XCTAssertEqual(AppIdentity.bundleIdentifier, "com.m-pineapple.warp-command-runner")
-        XCTAssertEqual(AppIdentity.version, "7.0.0")
+        XCTAssertEqual(AppIdentity.version, "8.0.0")
         XCTAssertFalse(AppIdentity.commandName.contains("claude"))
         XCTAssertFalse(AppIdentity.bundleIdentifier.contains("claude"))
         XCTAssertFalse(AppIdentity.configDirectoryName.contains("claude"))
@@ -364,5 +364,119 @@ final class AppIdentityTests: XCTestCase {
         XCTAssertTrue(AppIdentity.tempFilePrefixes.contains("wcr_output_"))
         XCTAssertTrue(AppIdentity.tempFilePrefixes.contains("claude_output_"))
         XCTAssertTrue(AppIdentity.tempFilePrefixes.contains("claude_script_"))
+    }
+}
+
+// MARK: - Remote MCP policy and OAuth helpers
+
+final class RemotePolicyTests: XCTestCase {
+    func testKeystrokeToolsDeniedByDefault() {
+        for tool in ["execute_command", "execute_with_auto_retrieve", "execute_with_streaming", "run_template", "send_to_session"] {
+            XCTAssertNotNil(RemotePolicy.denial(for: tool, allowKeystrokeTools: false), tool)
+        }
+    }
+
+    func testPipelineAllowedRemotely() {
+        XCTAssertNil(RemotePolicy.denial(for: "execute_pipeline", allowKeystrokeTools: false))
+        XCTAssertNil(RemotePolicy.denial(for: "get_command_output", allowKeystrokeTools: false))
+    }
+
+    func testKeystrokeToolsAllowedWhenOptedIn() {
+        XCTAssertNil(RemotePolicy.denial(for: "execute_command", allowKeystrokeTools: true))
+    }
+}
+
+final class OAuthCryptoTests: XCTestCase {
+    func testS256MatchesKnownVector() {
+        // RFC 7636 appendix B
+        let verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+        let challenge = OAuthCrypto.s256Challenge(verifier: verifier)
+        XCTAssertEqual(challenge, "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
+    }
+
+    func testRegisterRejectsNonHTTPSRedirect() async throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("wcr-oauth-\(UUID().uuidString).json")
+        let oauth = OAuthService(issuer: "https://mcp.example.com", storeURL: tmp)
+        do {
+            _ = try await oauth.register(clientName: "x", redirectURIs: ["http://evil.example/cb"])
+            XCTFail("expected invalid redirect")
+        } catch OAuthError.invalidRedirect {
+            // expected
+        }
+        try? FileManager.default.removeItem(at: tmp)
+    }
+
+    func testPKCERoundTrip() async throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("wcr-oauth-\(UUID().uuidString).json")
+        let oauth = OAuthService(issuer: "https://mcp.example.com", storeURL: tmp)
+        let client = try await oauth.register(
+            clientName: "test",
+            redirectURIs: ["https://chatgpt.com/connector/oauth/callback"]
+        )
+        let verifier = OAuthCrypto.randomURLSafe()
+        let challenge = OAuthCrypto.s256Challenge(verifier: verifier)
+        let code = try await oauth.mintAuthorizationCode(
+            clientId: client.clientId,
+            redirectURI: "https://chatgpt.com/connector/oauth/callback",
+            codeChallenge: challenge,
+            resource: "https://mcp.example.com/mcp"
+        )
+        let token = try await oauth.exchangeCode(
+            code: code,
+            clientId: client.clientId,
+            redirectURI: "https://chatgpt.com/connector/oauth/callback",
+            codeVerifier: verifier
+        )
+        let beforeRevoke = await oauth.validateAccessToken(token.token)
+        XCTAssertNotNil(beforeRevoke)
+        try await oauth.revoke(token: token.token)
+        let afterRevoke = await oauth.validateAccessToken(token.token)
+        XCTAssertNil(afterRevoke)
+        try? FileManager.default.removeItem(at: tmp)
+    }
+}
+
+final class TunnelDoctorTests: XCTestCase {
+    func testDoctorMentionsUserOwnedTunnel() {
+        var config = Configuration.default
+        config.remote.publicBaseURL = "https://mcp.example.com"
+        let report = TunnelDoctor.run(config: config)
+        XCTAssertEqual(report.publicBaseURL, "https://mcp.example.com")
+        XCTAssertTrue(report.lines.contains(where: { $0.contains("mcp.example.com/mcp") }))
+        XCTAssertTrue(report.lines.contains(where: { $0.contains("does not host a relay") }))
+    }
+}
+
+final class LaunchAgentPlistTests: XCTestCase {
+    func testXmlEscapePreservesSpacesAndEscapesAmpersand() {
+        let path = "/Applications/Warp Command Runner.app/Contents/MacOS/warp-command-runner"
+        XCTAssertEqual(RemoteLaunchAgent.xmlEscape(path), path)
+        XCTAssertEqual(RemoteLaunchAgent.xmlEscape("a&b"), "a&amp;b")
+    }
+}
+
+final class RemoteHTTPBindPinTests: XCTestCase {
+    func testBindHostIsLoopbackAndNeverWildcard() throws {
+        let src = try readPinnedSource("Sources/WarpCommandRunner/Remote/RemoteHTTPServer.swift")
+        XCTAssertTrue(src.contains("bind(host: \"127.0.0.1\""), "HTTP must bind loopback")
+        XCTAssertFalse(src.contains("0.0.0.0"), "must not bind wildcard")
+    }
+
+    func testCLIExposesHTTPPortNotLegacyPortFlag() throws {
+        let src = try readPinnedSource("Sources/WarpCommandRunner/WarpCommandRunner.swift")
+        XCTAssertTrue(src.contains("var http: Bool"))
+        XCTAssertTrue(src.contains("var httpPort: Int?"))
+        XCTAssertFalse(src.contains("customLong(\"port\")"))
+    }
+
+    private func readPinnedSource(_ relative: String) throws -> String {
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let url = root.appendingPathComponent(relative)
+        let data = try Data(contentsOf: url)
+        XCTAssertFalse(data.isEmpty, "pinned file missing or empty: \(relative)")
+        return String(decoding: data, as: UTF8.self)
     }
 }

@@ -45,7 +45,9 @@ struct WarpCommandRunner: AsyncParsableCommand {
             Warp Command Runner is a Model Context Protocol server. Any MCP client —
             Warp's agent, Claude Desktop, ChatGPT desktop, Cursor, VS Code, Continue,
             Gemini CLI, and others — can spawn this binary over stdio and call its
-            tools. Commands run in Warp; the chat host can be whichever model you use.
+            tools. Pass --http to serve Streamable HTTP on 127.0.0.1 for phone and
+            website connectors (you supply the public HTTPS URL). Commands run on
+            this Mac.
 
             Version \(version)
             """,
@@ -67,6 +69,21 @@ struct WarpCommandRunner: AsyncParsableCommand {
     
     @Flag(name: .long, help: "Validate configuration")
     var validateConfig: Bool = false
+
+    @Flag(name: .long, help: "Serve Streamable HTTP on 127.0.0.1 for remote MCP hosts. Default is stdio.")
+    var http: Bool = false
+
+    @Option(name: .long, help: "Loopback port for --http (default: config remote.listenPort)")
+    var httpPort: Int?
+
+    @Flag(name: .customLong("install-agent"), help: "Install a user LaunchAgent that runs --http at login")
+    var installAgent: Bool = false
+
+    @Flag(name: .customLong("uninstall-agent"), help: "Remove the remote-MCP LaunchAgent")
+    var uninstallAgent: Bool = false
+
+    @Flag(name: .customLong("remote-doctor"), help: "Check loopback bind, tunnel CLIs, and publicBaseURL")
+    var remoteDoctor: Bool = false
     
     mutating func run() async throws {
         // Configure logging
@@ -117,6 +134,27 @@ struct WarpCommandRunner: AsyncParsableCommand {
             }
             return
         }
+
+        if remoteDoctor {
+            for line in TunnelDoctor.run(config: config).lines {
+                print(line)
+            }
+            return
+        }
+
+        if installAgent {
+            print(try RemoteLaunchAgent.install())
+            return
+        }
+
+        if uninstallAgent {
+            print(try RemoteLaunchAgent.uninstall())
+            return
+        }
+
+        let httpMode = http
+        let allowKeystrokeTools = config.remote.allowKeystrokeTools
+        let listenPort = httpPort ?? config.remote.listenPort
         
         if verbose {
             logger.info("Starting Warp Command Runner MCP Server v\(Self.version)...")
@@ -855,7 +893,14 @@ struct WarpCommandRunner: AsyncParsableCommand {
         
         await server.withMethodHandler(CallTool.self) { params in
             logger.info("Tool called: \(params.name)")
-            
+            if httpMode {
+                if let denial = RemotePolicy.denial(for: params.name, allowKeystrokeTools: allowKeystrokeTools) {
+                    RemoteAuditLog.append(tool: params.name, allowed: false, detail: "keystroke-gated")
+                    return CallTool.Result(content: [.text(denial)], isError: true)
+                }
+                RemoteAuditLog.append(tool: params.name, allowed: true, detail: "")
+            }
+
             switch params.name {
             case "suggest_command":
                 return try await handleSuggestCommand(params: params, logger: logger)
@@ -961,8 +1006,25 @@ struct WarpCommandRunner: AsyncParsableCommand {
         }
         
         // Create transport and start server
-        let transport = StdioTransport(logger: logger)
-        let mcpService = MCPService(server: server, transport: transport)
+        let mcpService: MCPService
+        var extraServices: [any Service] = []
+        if httpMode {
+            let issuer = (config.remote.publicBaseURL?.trimmingCharacters(in: CharacterSet(charactersIn: "/"))).flatMap { $0.isEmpty ? nil : $0 }
+                ?? "http://127.0.0.1:\(listenPort)"
+            let oauth = OAuthService(issuer: issuer)
+            let bridge = HTTPBridgeTransport(logger: logger)
+            mcpService = MCPService(server: server, transport: bridge)
+            let httpServer = RemoteHTTPServer(
+                logger: logger,
+                oauth: oauth,
+                bridge: bridge,
+                listenPort: listenPort,
+                issuer: issuer
+            )
+            extraServices.append(HTTPListenService(server: httpServer))
+        } else {
+            mcpService = MCPService(server: server, transport: StdioTransport(logger: logger))
+        }
 
         // Tier E: optional shell-shim Unix-socket listener. Non-fatal on
         // failure — shim is opt-in observability.
@@ -970,7 +1032,7 @@ struct WarpCommandRunner: AsyncParsableCommand {
 
         // Create service group
         let serviceGroup = ServiceGroup(
-            services: [mcpService],
+            services: [mcpService] + extraServices,
             gracefulShutdownSignals: [.sigterm, .sigint],
             logger: logger
         )

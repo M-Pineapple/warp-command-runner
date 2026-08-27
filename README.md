@@ -10,7 +10,18 @@ This is for people who **don't live in Cursor or Claude Code**. If you already c
 
 > Built for [Warp Terminal](https://app.warp.dev/referral/G9W3EY). The five most powerful tools route commands **visibly** into your active Warp tab. Register the same binary with as many MCP hosts as you want — the server speaks standard MCP over stdio and does not care which model is calling.
 
-**Can any cloud AI use this?** Any **local MCP host** can. A website (grok.com, chatgpt.com, claude.ai in the browser) cannot spawn a process on your Mac. Full matrix: [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
+**Can any cloud AI use this?** Any **local MCP host** can, over stdio. Phone apps and websites need **remote MCP**: you run `--http` and publish HTTPS with a tunnel **you** own. Guide: [`docs/REMOTE.md`](docs/REMOTE.md). Matrix: [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
+
+## What's new in v8.0.0 — remote MCP
+
+Opt-in Streamable HTTP so Grok, ChatGPT, and Claude can call this Mac from a phone or a website. You create the public HTTPS URL (your Cloudflare tunnel, your Tailscale Funnel, or your reverse proxy). This project does not host a relay.
+
+- `warp-command-runner --http` listens on `127.0.0.1` only (default port 8741)
+- OAuth 2.1 with PKCE and Dynamic Client Registration
+- Warp-routing (keystroke) tools stay off for remote callers; use `execute_pipeline`
+- `--remote-doctor` and `--install-agent` for a login LaunchAgent
+
+Local stdio is unchanged. Details: [`docs/REMOTE.md`](docs/REMOTE.md).
 
 ## What's new in v7.0.0 — rebrand
 
@@ -20,7 +31,7 @@ Formerly **Claude Command Runner**. Same engine, host-agnostic name:
 - Existing `~/.claude-command-runner` data is copied on first launch (the old folder is left in place)
 - MCP `serverInfo` name is `Warp Command Runner` so every host lists it that way
 - Config snippets for Warp, Claude Desktop, ChatGPT desktop, Cursor, VS Code, and a generic stdio host
-- Honest compatibility doc: stdio MCP works everywhere a local host exists; it is **not** a remote/HTTPS MCP for browser chats
+- Honest compatibility doc: stdio MCP works everywhere a local host exists. Remote MCP is opt-in in v8 (`docs/REMOTE.md`).
 
 v6.x history (Warp deeplinks, OSC 777, dual-consumer Warp Agent, 40 tools) is unchanged — see [CHANGELOG.md](CHANGELOG.md).
 
@@ -56,14 +67,14 @@ The protocol is MCP. The **value** depends on whether the host is local and whet
 | **VS Code / Continue / Cline / Windsurf** | their MCP settings; see `config/` | Optional |
 | **Cursor** | `~/.cursor/mcp.json` | Optional — Cursor already has a terminal |
 | **Claude Code** | `~/.claude.json` | Niche — it already has Bash |
-| **Browser chats** (chatgpt.com, grok.com, claude.ai, Gemini web) | — | No. They cannot launch a local stdio server |
+| **Browser / phone chats** (chatgpt.com, grok.com, claude.ai) | custom connector URL | Optional — needs v8 `--http` plus **your** HTTPS tunnel. [`docs/REMOTE.md`](docs/REMOTE.md) |
 
 ### Quick decision tree
 
 - **You use Warp and chat with Grok / ChatGPT / Claude / Gemini inside Warp?** → Register in `~/.warp/.mcp.json`. That's the whole product.
 - **You use Claude Desktop (or ChatGPT desktop) and want commands visible in Warp?** → Register there too. Same binary.
 - **You use Cursor or Claude Code and want everything in one pane?** → You probably don't need this.
-- **You only use a website chatbot?** → This MCP cannot reach that tab. Use a desktop MCP host.
+- **You only use a website or phone chatbot?** → Stdio cannot reach that tab. Enable remote MCP (`docs/REMOTE.md`) or use a desktop MCP host.
 
 Five of the 40 tools (`execute_command`, `execute_with_auto_retrieve`, `execute_with_streaming`, `run_template`, `send_to_session`) are the Warp-routing ones. The rest are ordinary server-side utilities (clipboard, SSH, snapshots, …) that work from any host.
 
@@ -371,6 +382,8 @@ Pure subprocess, no AppleScript, no TCC layer, captures output cleanly, works on
 
 ### Available Tools (40)
 
+On `--http` sessions the five Warp-routing tools are refused unless `remote.allowKeystrokeTools` is true. Use `execute_pipeline`. See [`docs/REMOTE.md`](docs/REMOTE.md).
+
 #### Core Execution
 
 | Tool | Description | Use Case |
@@ -574,6 +587,9 @@ SSH profiles are stored at `~/.warp-command-runner/ssh_profiles.json`.
 ### Q: Can Grok, ChatGPT, or Gemini use this — not just Claude?
 **A:** Yes, if you chat inside a **local MCP host**. Warp's agent panel is the usual path: set Warp's model to Grok (or GPT, Claude, Gemini) and register this server in `~/.warp/.mcp.json`. ChatGPT desktop and Claude Desktop work the same way. **Browser** tabs on grok.com / chatgpt.com / claude.ai cannot launch a local process. Full matrix: [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
+### Q: What's new in v8.0.0?
+**A:** Opt-in remote MCP. `warp-command-runner --http` serves Streamable HTTP on loopback with OAuth 2.1. You publish HTTPS with your own tunnel. Phone and website connectors can then call this Mac. Keystroke tools stay off remotely. See [docs/REMOTE.md](docs/REMOTE.md).
+
 ### Q: What's new in v7.0.0?
 **A:** Rebrand from Claude Command Runner to Warp Command Runner. Same 40 tools and stdio MCP protocol; names, bundle ID, and `~/.warp-command-runner` paths updated. v6 config is copied on first launch.
 
@@ -693,7 +709,7 @@ The MCP binary requires **Accessibility** permission only for the AppleScript ke
 ---
 
 ### MCP Not Responding
-1. Check the client logs (Claude Desktop or Warp). The MCP server runs as a child of the client over stdio — there is no listening TCP port in v6.0.
+1. Check the client logs (Claude Desktop or Warp). The default server is a child of the client over stdio. Remote MCP (`--http`) listens on `127.0.0.1` only — see [`docs/REMOTE.md`](docs/REMOTE.md).
 2. Restart the client (Claude Desktop and/or Warp).
 3. Rebuild with `./build.sh`. (And re-add the binary to Accessibility if `send_to_session` is failing.)
 
@@ -760,7 +776,7 @@ If commands execute but aren't saved to the database:
          └──────────────┘  └─────────────────────┘
 ```
 
-Any local MCP host, one server. Tab/window operations use Warp's `warp://` URL scheme; status events use OSC 777; typing into a tab still uses AppleScript keystrokes (Warp has no API for that). Browser chats cannot connect — see [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
+Any local MCP host, one server. Tab/window operations use Warp's `warp://` URL scheme; status events use OSC 777; typing into a tab still uses AppleScript keystrokes (Warp has no API for that). Phone and website chats need `--http` plus your own HTTPS tunnel — see [`docs/REMOTE.md`](docs/REMOTE.md).
 
 ## Contributing
 

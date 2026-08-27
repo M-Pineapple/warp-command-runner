@@ -85,6 +85,22 @@ public struct Configuration: Codable {
         public var customPatterns: [String] = []
     }
 
+    /// Opt-in Streamable HTTP for phone / cloud MCP hosts.
+    /// Binds loopback only. The user supplies their own public HTTPS URL
+    /// (Cloudflare tunnel, Tailscale Funnel, or a reverse proxy they control).
+    public struct Remote: Codable {
+        /// Loopback bind. Never listen on 0.0.0.0.
+        public var listenPort: Int = 8741
+        /// Public origin the user created, e.g. `https://mcp.example.com`.
+        /// Used as the OAuth issuer and in metadata. No trailing slash.
+        public var publicBaseURL: String?
+        /// Warp-routing tools (keystroke / front-tab) stay off unless the user
+        /// turns this on. Remote callers should use `execute_pipeline`.
+        public var allowKeystrokeTools: Bool = false
+        /// Reserved. Parsed from config but not yet enforced (no Mac prompt).
+        public var requireMacApproval: Bool = false
+    }
+
     public var terminal: Terminal = Terminal()
     public var security: Security = Security()
     public var output: Output = Output()
@@ -95,6 +111,7 @@ public struct Configuration: Codable {
     public var fileWatching: FileWatching = FileWatching()
     public var ssh: SSHConfig = SSHConfig()
     public var interactiveDetection: InteractiveDetection = InteractiveDetection()
+    public var remote: Remote = Remote()
     public var port: Int = 9876
     public var autoUpdate: Bool = true
 
@@ -124,6 +141,7 @@ public struct Configuration: Codable {
         self.fileWatching = try c.decodeIfPresent(FileWatching.self, forKey: .fileWatching) ?? FileWatching()
         self.ssh = try c.decodeIfPresent(SSHConfig.self, forKey: .ssh) ?? SSHConfig()
         self.interactiveDetection = try c.decodeIfPresent(InteractiveDetection.self, forKey: .interactiveDetection) ?? InteractiveDetection()
+        self.remote = try c.decodeIfPresent(Remote.self, forKey: .remote) ?? Remote()
         self.port = try c.decodeIfPresent(Int.self, forKey: .port) ?? 9876
         self.autoUpdate = try c.decodeIfPresent(Bool.self, forKey: .autoUpdate) ?? true
     }
@@ -131,7 +149,7 @@ public struct Configuration: Codable {
     private enum CodingKeys: String, CodingKey {
         case terminal, security, output, history, logging
         case notifications, workspace, fileWatching, ssh
-        case interactiveDetection, port, autoUpdate
+        case interactiveDetection, remote, port, autoUpdate
     }
 }
 
@@ -258,6 +276,19 @@ public class ConfigurationManager {
         // Validate port
         if configuration.port < 1024 || configuration.port > 65535 {
             errors.append("Port must be between 1024 and 65535")
+        }
+
+        if configuration.remote.listenPort < 1024 || configuration.remote.listenPort > 65535 {
+            errors.append("remote.listenPort must be between 1024 and 65535")
+        }
+        if let base = configuration.remote.publicBaseURL, !base.isEmpty {
+            if let url = URL(string: base), let scheme = url.scheme?.lowercased(), let host = url.host, !host.isEmpty {
+                if scheme != "https" {
+                    errors.append("remote.publicBaseURL must be https (the URL Grok / ChatGPT / Claude will call)")
+                }
+            } else {
+                errors.append("remote.publicBaseURL is not a valid URL")
+            }
         }
 
         // Validate file watching
