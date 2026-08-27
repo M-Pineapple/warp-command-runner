@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Docs
-
-- Cursor splits MCP `command` on spaces, so `/Applications/Warp Command Runner.app/...` fails with `spawn /Applications/Warp ENOENT`. Documented in [`config/cursor-mcp.json`](config/cursor-mcp.json); `helper/install-cursor-wrapper.sh` installs a no-space shim at `~/.local/bin/warp-command-runner`. Warp and Claude Desktop keep the official bundle path. Do not rename the `.app`.
-
 ## [7.0.0] - 2026-08-25 — Warp Command Runner rebrand
 
 Formerly **Claude Command Runner**. Same MCP server; names and docs match how the protocol actually works.
@@ -29,6 +25,10 @@ The v6 binary already spoke standard MCP over stdio. Any local host (Warp Agent 
 - `WCR_CODESIGN_IDENTITY` (the v6 `CCR_CODESIGN_IDENTITY` alias still works)
 - Docs and `config/` snippets for Warp, Claude Desktop, ChatGPT desktop, Cursor, VS Code, and generic stdio
 - New [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)
+
+### Docs
+
+- Cursor splits MCP `command` on spaces, so `/Applications/Warp Command Runner.app/...` fails with `spawn /Applications/Warp ENOENT`. Documented in [`config/cursor-mcp.json`](config/cursor-mcp.json); `helper/install-cursor-wrapper.sh` installs a no-space shim at `~/.local/bin/warp-command-runner`. Warp and Claude Desktop keep the official bundle path. Do not rename the `.app`.
 
 ### Migration
 
