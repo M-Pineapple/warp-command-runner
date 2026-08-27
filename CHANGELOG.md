@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [8.0.0] - 2026-08-27 — remote MCP for phone and cloud hosts
+
+Stdio is unchanged. Opt-in Streamable HTTP so Grok, ChatGPT, and Claude can call this Mac when you publish HTTPS yourself.
+
+### Added
+
+- `warp-command-runner --http` — Streamable HTTP on `127.0.0.1` only (default port 8741)
+- OAuth 2.1 with PKCE, Dynamic Client Registration, protected-resource metadata, refresh tokens
+- `remote` block in `config.json`: `listenPort`, `publicBaseURL`, `allowKeystrokeTools` (`requireMacApproval` is parsed and reserved; it does not yet show a Mac prompt)
+- `--remote-doctor`, `--install-agent`, `--uninstall-agent`
+- [`docs/REMOTE.md`](docs/REMOTE.md) and [`config/remote.example.json`](config/remote.example.json) (fictional `https://mcp.example.com`)
+
+### Changed
+
+- Remote sessions refuse the five Warp-routing tools unless `allowKeystrokeTools` is true. Use `execute_pipeline`.
+- Compatibility docs describe the tunnel path. This project still does not host a relay.
+
+### Notes
+
+- The public URL is whatever you create (Cloudflare named tunnel, Tailscale Funnel, or a reverse proxy on your account). Quick tunnels change hostname every start.
+- The Mac must stay awake and the `--http` process must stay running.
+- ChatGPT write tools need Developer mode. Whether iOS can invoke them is a host limit.
+
 ## [7.0.0] - 2026-08-25 — Warp Command Runner rebrand
 
 Formerly **Claude Command Runner**. Same MCP server; names and docs match how the protocol actually works.

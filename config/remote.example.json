@@ -1,0 +1,9 @@
+{
+  "_comment": "Copy the remote object into ~/.warp-command-runner/config.json. publicBaseURL is YOUR https origin (Cloudflare named tunnel, Tailscale Funnel, or a reverse proxy you control). The sample hostname is fictional.",
+  "remote": {
+    "listenPort": 8741,
+    "publicBaseURL": "https://mcp.example.com",
+    "allowKeystrokeTools": false,
+    "requireMacApproval": false
+  }
+}

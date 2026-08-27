@@ -3,9 +3,8 @@
 **Purpose:** the standing operating procedure for ANY AI agent (Grok in Warp/Wave,
 Claude, or other) doing software work through Warp Command Runner. Paste this as
 the agent's system prompt / Warp Rule, and seed every new project with the
-per-project template at the bottom. Distilled from the CurrentTrader Pro
-engineering practice (Fable, 2026) — the practices below each exist because their
-absence caused a production incident.
+per-project template at the bottom. Distilled from production incidents where
+the practices below were missing.
 
 ---
 

@@ -1,8 +1,8 @@
 # Can any AI use Warp Command Runner?
 
-**Short answer:** any app that is a **local MCP host** can. The binary speaks the standard Model Context Protocol over **stdio**. It does not know or care whether the model on the other end is Grok, ChatGPT, Claude, Gemini, or something else.
+**Short answer:** any app that is a **local MCP host** can spawn this binary over **stdio**. Phone apps and websites cannot spawn a process on your Mac. They can call it only if you opt into **remote MCP**: a loopback HTTP server plus a public HTTPS URL **you** create (your Cloudflare tunnel, your Tailscale Funnel, or your reverse proxy). This project does not host that URL.
 
-**Short caveat:** a **cloud web chat** (grok.com, chatgpt.com, claude.ai in the browser, Gemini on the web) cannot spawn a process on your Mac. Those sites never see this MCP unless they add a *remote* HTTPS MCP connector — which this server does not expose, on purpose. Putting your live terminal on the public internet would be a serious security hole.
+**Short caveat:** exposing a terminal MCP on the public internet is dangerous. Remote mode is opt-in, binds `127.0.0.1` only, uses OAuth 2.1, and refuses Warp-routing (keystroke) tools unless you turn that on. Setup: [`docs/REMOTE.md`](REMOTE.md).
 
 This is the right tool if you chat with an AI from a **desktop or CLI host** and want that chat to read files, run commands, and drive [Warp](https://app.warp.dev/referral/G9W3EY) — without installing Cursor or Claude Code.
 
@@ -48,23 +48,21 @@ Ready-to-edit snippets live in [`config/`](../config/).
 
 ## What does *not* work (and why)
 
-### Browser / “cloud AI” chat pages
+### Browser / phone chats without a tunnel
 
-MCP stdio means “the chat app starts a child process on this computer.” A website in Safari or Chrome cannot do that. Some vendors are adding **remote MCP** (HTTPS). This project stays on stdio because:
+MCP stdio means “the chat app starts a child process on this computer.” A website or phone app cannot do that. Those hosts speak **remote MCP** (HTTPS) from the vendor's cloud.
 
-- Your terminal, files, SSH keys, and clipboard stay on your machine
-- There is no public URL to attack
-- The same binary works with every local host
+v8 can serve that protocol on loopback (`warp-command-runner --http`) if **you** publish HTTPS with your own Cloudflare tunnel, Tailscale Funnel, or reverse proxy. This repo does not provide a hosted endpoint. Full steps: [`docs/REMOTE.md`](REMOTE.md).
 
-If a vendor only accepts a public HTTPS MCP URL, do **not** tunnel this server to the internet. That would let whoever hits the URL run commands as you.
+Do not point a connector at a URL you do not control.
 
-### “Just paste this into Grok / ChatGPT on the web”
+### Stdio-only path (still the default)
 
-The model can *talk* about commands. It cannot *run* them unless the app you are chatting in is an MCP host that launched this binary.
+If you never enable `--http`, cloud chats still cannot see this Mac. That remains the safe default.
 
-**The practical Grok path:** install [Warp](https://app.warp.dev/referral/G9W3EY), set Warp's AI model to Grok, register this MCP in `~/.warp/.mcp.json`. You chat with Grok inside Warp; Grok calls the same 40 tools.
+**The practical Grok-on-the-desk path:** install [Warp](https://app.warp.dev/referral/G9W3EY), set Warp's AI model to Grok, register this MCP in `~/.warp/.mcp.json`.
 
-**The practical ChatGPT path:** use ChatGPT's desktop app (or any other local MCP host) and add the stdio server. ChatGPT in the browser cannot see your Mac.
+**The practical Grok-on-the-phone path:** `--http` plus your tunnel, then Grok → Connectors → custom MCP. See [`docs/REMOTE.md`](REMOTE.md).
 
 ## Same binary, many hosts
 
@@ -85,4 +83,4 @@ Warp, Claude Desktop, Cursor, and most others use this `mcpServers` shape. VS Co
 
 ## Security (read this)
 
-This MCP can run shell commands, read files, touch the clipboard, and SSH. Treat the host you attach it to as **fully trusted**. Block dangerous patterns in `~/.warp-command-runner/config.json`. Do not attach it to an untrusted or public MCP endpoint.
+This MCP can run shell commands, read files, touch the clipboard, and SSH. Treat the host you attach it to as **fully trusted**. Block dangerous patterns in `~/.warp-command-runner/config.json`. Remote MCP adds a public URL that **you** create. Anyone who can complete OAuth against that URL can run commands as you.
