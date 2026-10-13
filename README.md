@@ -8,6 +8,8 @@
   [![Stars](https://img.shields.io/github/stars/M-Pineapple/warp-command-runner)](https://github.com/M-Pineapple/warp-command-runner/stargazers)
 </div>
 
+<img src="assets/demo.gif" alt="warp-command-runner printing version 8.0.0 and its help" width="720"/>
+
 **Give any chat AI a real terminal.** You ask in Warp, Claude Desktop, ChatGPT desktop, or any other MCP host. The model types the command into your [Warp](https://app.warp.dev/referral/G9W3EY) tab, captures the output, and tells you what happened. Forty tools: command execution, project setups, file watching, SSH, clipboard, environment intelligence. macOS, Swift, open source.
 
 This is for people who **don't live in Cursor or Claude Code**. If you already chat with Grok, ChatGPT, Claude, or Gemini from a desktop app (especially Warp's agent panel), add this MCP and that chat can read your files and run commands on your machine.
