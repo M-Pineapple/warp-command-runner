@@ -35,6 +35,22 @@ actor OAuthService {
 
     private var store: Store
     private let storeURL: URL
+    private var pairing = PairingCodeState()
+    private var registrationLimiter = RegistrationLimiter()
+    /// Called with a fresh pairing code so it can be shown on the Mac only.
+    private var onPairingCode: @Sendable (String) -> Void = { PairingCodeDisplay.show($0) }
+
+    func setPairingDisplay(_ display: @escaping @Sendable (String) -> Void) {
+        onPairingCode = display
+    }
+
+    /// Ensures a pairing code is active; displays it on the Mac when a new one
+    /// is generated. Never returns the code to HTTP callers.
+    func preparePairing() {
+        if let fresh = pairing.issueIfNeeded() {
+            onPairingCode(fresh)
+        }
+    }
     let issuer: String
 
     init(issuer: String, storeURL: URL = AppPaths.configDirectory.appendingPathComponent("oauth-store.json")) {
@@ -77,6 +93,9 @@ actor OAuthService {
     }
 
     func register(clientName: String, redirectURIs: [String]) throws -> Client {
+        guard registrationLimiter.allow(existingClients: store.clients.count) else {
+            throw OAuthError.registrationLimited
+        }
         let httpsURIs = redirectURIs.filter { uri in
             guard let url = URL(string: uri), let scheme = url.scheme?.lowercased() else { return false }
             return scheme == "https" || (scheme == "http" && (url.host == "127.0.0.1" || url.host == "localhost"))
@@ -102,8 +121,17 @@ actor OAuthService {
         clientId: String,
         redirectURI: String,
         codeChallenge: String,
-        resource: String?
+        resource: String?,
+        pairingCode: String?
     ) throws -> String {
+        // Check the client first so random POSTs cannot burn the pairing code.
+        guard let known = client(id: clientId), known.redirectURIs.contains(redirectURI) else {
+            throw OAuthError.unknownClient
+        }
+        guard pairing.consume(pairingCode) else {
+            preparePairing()
+            throw OAuthError.pairingRequired
+        }
         guard let client = client(id: clientId) else { throw OAuthError.unknownClient }
         guard client.redirectURIs.contains(redirectURI) else { throw OAuthError.invalidRedirect }
         guard !codeChallenge.isEmpty else { throw OAuthError.pkceRequired }
@@ -204,6 +232,8 @@ enum OAuthError: Error, LocalizedError {
     case unknownClient
     case pkceRequired
     case invalidGrant
+    case pairingRequired
+    case registrationLimited
 
     var errorDescription: String? {
         switch self {
@@ -211,6 +241,8 @@ enum OAuthError: Error, LocalizedError {
         case .unknownClient: return "unauthorized_client"
         case .pkceRequired: return "invalid_request"
         case .invalidGrant: return "invalid_grant"
+        case .pairingRequired: return "access_denied"
+        case .registrationLimited: return "temporarily_unavailable"
         }
     }
 }

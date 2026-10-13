@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [8.0.1] - 2026-10-13
+
+### Security
+
+- Security: remote (--http) mode now requires a one-time pairing code shown on the Mac to authorize new clients. Remote-mode users should update and delete ~/.warp-command-runner/oauth-store.json to re-pair.
+
+### Changed
+
+- The Allow page asks for an 8-character pairing code. The code appears only on the Mac (a notification, plus the Terminal and log of the `--http` process). It is single use, expires after 10 minutes, is compared in constant time, and is replaced after 5 wrong attempts.
+- Dynamic client registration is capped (20 clients in total, 5 new registrations per 10 minutes).
+- Remote calls to `execute_pipeline`, `ssh_execute` and the keystroke tools are refused at the HTTP bridge unless they carry a validated access token.
+
 ## [8.0.0] - 2026-08-27 — remote MCP for phone and cloud hosts
 
 Stdio is unchanged. Opt-in Streamable HTTP so Grok, ChatGPT, and Claude can call this Mac when you publish HTTPS yourself.

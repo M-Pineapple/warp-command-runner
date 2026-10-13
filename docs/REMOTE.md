@@ -95,3 +95,7 @@ Set `remote.allowKeystrokeTools` to `true` only if you understand that a cloud m
 | `--remote-doctor` | Print tunnel / URL checks |
 | `--install-agent` | User LaunchAgent for `--http` |
 | `--uninstall-agent` | Remove that LaunchAgent |
+
+## Pairing code (8.0.1+)
+
+The Allow page asks for a one-time pairing code. The code is shown only on the Mac, as a notification and in the Terminal running `--http`. It is single use, expires after 10 minutes, and is replaced after 5 wrong tries. If you used remote mode before 8.0.1, delete `~/.warp-command-runner/oauth-store.json` and connect again.
