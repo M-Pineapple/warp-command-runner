@@ -1,0 +1,4 @@
+{
+  "name": "Warp Command Runner",
+  "install": "bash .cursor/install.sh"
+}

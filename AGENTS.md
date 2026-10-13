@@ -47,3 +47,11 @@ A brand-new install will speak stdio MCP when a local host spawns the binary wit
 - `docs/REMOTE.md` — remote MCP
 - `docs/COMPATIBILITY.md` — hosts
 - `config/` — stdio snippets
+
+## Cloud Agent (Linux)
+
+Cloud Agents are Ubuntu, not macOS. `.cursor/install.sh` installs Swift 6.4.1, `libsqlite3-dev`, and a real `/private/tmp` (required by `ProcessRunnerTests.testWorkingDirectoryIsHonoured`). Do not run `./build.sh` here. It code-signs and builds a `.app` bundle.
+
+`LinuxSupport/` is a Linux-only package dependency (see `Package.swift`). It supplies `SQLite3`, and stand-ins for `AppKit`, `CryptoKit`, and `Security`. `LinuxPlatform.swift` supplies the missing Dispatch file-system source. File-watch tools register, but they do not observe writes. Keystroke routing still needs macOS `osascript` and Warp.
+
+On Linux the verification commands are the same as the gate above, against `.build/release/warp-command-runner`. `AppIdentity.version` stays the source of truth for the version line.
