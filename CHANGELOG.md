@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- README: badge row (licence, Swift/macOS, stars), a short Quick start from `./build.sh`, and a 'More MCP servers by M-Pineapple' block. Buy Me A Coffee is unchanged.
+
 ## [8.0.0] - 2026-08-27 — remote MCP for phone and cloud hosts
 
 Stdio is unchanged. Opt-in Streamable HTTP so Grok, ChatGPT, and Claude can call this Mac when you publish HTTPS yourself.

@@ -2,6 +2,10 @@
 
 <div align="center">
   <img src="assets/icon.svg" width="256" alt="Warp Command Runner — terminal prompt and Warp glyph">
+
+  [![Licence](https://img.shields.io/github/license/M-Pineapple/warp-command-runner?label=Licence)](LICENSE)
+  [![Swift](https://img.shields.io/badge/Swift-macOS-F05138?logo=swift&logoColor=white)](https://www.swift.org)
+  [![Stars](https://img.shields.io/github/stars/M-Pineapple/warp-command-runner)](https://github.com/M-Pineapple/warp-command-runner/stargazers)
 </div>
 
 **Give any chat AI a real terminal.** You ask in Warp, Claude Desktop, ChatGPT desktop, or any other MCP host. The model types the command into your [Warp](https://app.warp.dev/referral/G9W3EY) tab, captures the output, and tells you what happened. Forty tools: command execution, project setups, file watching, SSH, clipboard, environment intelligence. macOS, Swift, open source.
@@ -11,6 +15,35 @@ This is for people who **don't live in Cursor or Claude Code**. If you already c
 > Built for [Warp Terminal](https://app.warp.dev/referral/G9W3EY). The five most powerful tools route commands **visibly** into your active Warp tab. Register the same binary with as many MCP hosts as you want — the server speaks standard MCP over stdio and does not care which model is calling.
 
 **Can any cloud AI use this?** Any **local MCP host** can, over stdio. Phone apps and websites need **remote MCP**: you run `--http` and publish HTTPS with a tunnel **you** own. Guide: [`docs/REMOTE.md`](docs/REMOTE.md). Matrix: [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
+
+## Quick start
+
+You need macOS 13 or later, Swift 6.0+ (Xcode 16+), and a local MCP host such as Warp Agent or Claude Desktop.
+
+```bash
+git clone https://github.com/M-Pineapple/warp-command-runner.git
+cd warp-command-runner
+./build.sh
+```
+
+`./build.sh` resolves packages, applies the required swift-sdk patch, builds the release binary, and wraps it in `.build/release/warp-command-runner.app`.
+
+Point your host at the binary inside that bundle. For Warp Agent, merge this into `~/.warp/.mcp.json` and replace the path with yours:
+
+```json
+{
+  "mcpServers": {
+    "warp-command-runner": {
+      "command": "/absolute/path/to/warp-command-runner/.build/release/warp-command-runner.app/Contents/MacOS/warp-command-runner",
+      "args": []
+    }
+  }
+}
+```
+
+Restart the host. Ask it to run `swift --version`. That uses `execute_pipeline` and needs no Accessibility grants.
+
+An unsigned build is enough for the 34 non-keystroke tools. The five Warp-routing tools need a signed `.app` in `/Applications/`. Host snippets, signing, and the Sequoia recipe are under [Installation](#installation). Phone and website hosts need `--http` plus your own HTTPS tunnel. See [`docs/REMOTE.md`](docs/REMOTE.md).
 
 ## What's new in v8.0.0 — remote MCP
 
@@ -809,6 +842,16 @@ Your support helps me:
 * Explore new terminal integrations and command intelligence
 
 Thank you for considering supporting my work! 🙏
+
+## More MCP servers by M-Pineapple
+
+- [Claude-Project-Coordinator](https://github.com/M-Pineapple/Claude-Project-Coordinator)
+- [CryptoAnalysisMCP](https://github.com/M-Pineapple/CryptoAnalysisMCP)
+- [msty-admin-mcp](https://github.com/M-Pineapple/msty-admin-mcp)
+- [member-berries-apple-mcp](https://github.com/M-Pineapple/member-berries-apple-mcp)
+- [seashell](https://github.com/M-Pineapple/seashell)
+- [TextEdit-MCP](https://github.com/M-Pineapple/TextEdit-MCP)
+- [hubspot-auditor](https://github.com/M-Pineapple/hubspot-auditor)
 
 ## License
 
