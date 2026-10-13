@@ -93,15 +93,15 @@ actor OAuthService {
     }
 
     func register(clientName: String, redirectURIs: [String]) throws -> Client {
-        guard registrationLimiter.allow(existingClients: store.clients.count) else {
-            throw OAuthError.registrationLimited
-        }
         let httpsURIs = redirectURIs.filter { uri in
             guard let url = URL(string: uri), let scheme = url.scheme?.lowercased() else { return false }
             return scheme == "https" || (scheme == "http" && (url.host == "127.0.0.1" || url.host == "localhost"))
         }
         guard !httpsURIs.isEmpty else {
             throw OAuthError.invalidRedirect
+        }
+        guard registrationLimiter.allow(existingClients: store.clients.count) else {
+            throw OAuthError.registrationLimited
         }
         let client = Client(
             clientId: OAuthCrypto.randomURLSafe(bytes: 16),
@@ -125,15 +125,12 @@ actor OAuthService {
         pairingCode: String?
     ) throws -> String {
         // Check the client first so random POSTs cannot burn the pairing code.
-        guard let known = client(id: clientId), known.redirectURIs.contains(redirectURI) else {
-            throw OAuthError.unknownClient
-        }
+        guard let known = client(id: clientId) else { throw OAuthError.unknownClient }
+        guard known.redirectURIs.contains(redirectURI) else { throw OAuthError.invalidRedirect }
         guard pairing.consume(pairingCode) else {
             preparePairing()
             throw OAuthError.pairingRequired
         }
-        guard let client = client(id: clientId) else { throw OAuthError.unknownClient }
-        guard client.redirectURIs.contains(redirectURI) else { throw OAuthError.invalidRedirect }
         guard !codeChallenge.isEmpty else { throw OAuthError.pkceRequired }
         pruneExpired()
         let code = OAuthCrypto.randomURLSafe(bytes: 32)

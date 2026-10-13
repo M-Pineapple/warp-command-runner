@@ -335,7 +335,7 @@ final class RemoteHTTPHandler: ChannelInboundHandler, @unchecked Sendable {
         <p>Enter the pairing code shown on the Mac (notification and the Terminal running <code>--http</code>). It is single use and expires in 10 minutes.</p>
         <p><input name="pairing_code" autocomplete="off" autocapitalize="characters" spellcheck="false" required aria-label="Pairing code"></p>
         <button type="submit" name="decision" value="allow">Allow</button>
-        <button type="submit" name="decision" value="deny">Deny</button>
+        <button type="submit" name="decision" value="deny" formnovalidate>Deny</button>
         </form></body></html>
         """
     }

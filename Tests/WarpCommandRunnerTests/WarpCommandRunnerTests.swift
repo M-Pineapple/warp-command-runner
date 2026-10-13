@@ -384,6 +384,14 @@ final class RemotePolicyTests: XCTestCase {
     func testKeystrokeToolsAllowedWhenOptedIn() {
         XCTAssertNil(RemotePolicy.denial(for: "execute_command", allowKeystrokeTools: true))
     }
+
+    func testShellAndKeystrokeRequireRemoteAuthorization() {
+        XCTAssertTrue(RemotePolicy.requiresRemoteAuthorization("execute_pipeline"))
+        XCTAssertTrue(RemotePolicy.requiresRemoteAuthorization("ssh_execute"))
+        XCTAssertTrue(RemotePolicy.requiresRemoteAuthorization("execute_command"))
+        XCTAssertFalse(RemotePolicy.requiresRemoteAuthorization("get_command_output"))
+        XCTAssertFalse(RemotePolicy.requiresRemoteAuthorization("list_templates"))
+    }
 }
 
 final class OAuthCryptoTests: XCTestCase {
@@ -408,6 +416,7 @@ final class OAuthCryptoTests: XCTestCase {
 
     func testPKCERoundTrip() async throws {
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("wcr-oauth-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
         let oauth = OAuthService(issuer: "https://mcp.example.com", storeURL: tmp)
         let client = try await oauth.register(
             clientName: "test",
@@ -415,11 +424,16 @@ final class OAuthCryptoTests: XCTestCase {
         )
         let verifier = OAuthCrypto.randomURLSafe()
         let challenge = OAuthCrypto.s256Challenge(verifier: verifier)
+        let pairing = PairingCapture()
+        await oauth.setPairingDisplay { pairing.handle($0) }
+        await oauth.preparePairing()
+        XCTAssertEqual(pairing.code?.count, 8)
         let code = try await oauth.mintAuthorizationCode(
             clientId: client.clientId,
             redirectURI: "https://chatgpt.com/connector/oauth/callback",
             codeChallenge: challenge,
-            resource: "https://mcp.example.com/mcp"
+            resource: "https://mcp.example.com/mcp",
+            pairingCode: pairing.code
         )
         let token = try await oauth.exchangeCode(
             code: code,
@@ -427,12 +441,197 @@ final class OAuthCryptoTests: XCTestCase {
             redirectURI: "https://chatgpt.com/connector/oauth/callback",
             codeVerifier: verifier
         )
+        XCTAssertTrue(token.scopes.contains("mcp"))
         let beforeRevoke = await oauth.validateAccessToken(token.token)
         XCTAssertNotNil(beforeRevoke)
         try await oauth.revoke(token: token.token)
         let afterRevoke = await oauth.validateAccessToken(token.token)
         XCTAssertNil(afterRevoke)
-        try? FileManager.default.removeItem(at: tmp)
+    }
+
+    func testMintRequiresPairingCodeAndDoesNotBurnItOnUnknownClient() async throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("wcr-oauth-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let oauth = OAuthService(issuer: "https://mcp.example.com", storeURL: tmp)
+        let client = try await oauth.register(
+            clientName: "test",
+            redirectURIs: ["https://chatgpt.com/connector/oauth/callback"]
+        )
+        let pairing = PairingCapture()
+        await oauth.setPairingDisplay { pairing.handle($0) }
+        await oauth.preparePairing()
+        let issued = try XCTUnwrap(pairing.code)
+        let challenge = OAuthCrypto.s256Challenge(verifier: OAuthCrypto.randomURLSafe())
+        do {
+            _ = try await oauth.mintAuthorizationCode(
+                clientId: "missing-client",
+                redirectURI: "https://chatgpt.com/connector/oauth/callback",
+                codeChallenge: challenge,
+                resource: nil,
+                pairingCode: "ZZZZZZZZ"
+            )
+            XCTFail("unknown client must fail before pairing is consumed")
+        } catch OAuthError.unknownClient {
+            // expected
+        }
+        do {
+            _ = try await oauth.mintAuthorizationCode(
+                clientId: client.clientId,
+                redirectURI: "https://chatgpt.com/connector/oauth/callback",
+                codeChallenge: challenge,
+                resource: nil,
+                pairingCode: nil
+            )
+            XCTFail("expected pairingRequired")
+        } catch OAuthError.pairingRequired {
+            // expected
+        }
+        let authCode = try await oauth.mintAuthorizationCode(
+            clientId: client.clientId,
+            redirectURI: "https://chatgpt.com/connector/oauth/callback",
+            codeChallenge: challenge,
+            resource: nil,
+            pairingCode: String(issued.prefix(4)) + "-" + String(issued.dropFirst(4))
+        )
+        XCTAssertFalse(authCode.isEmpty)
+        do {
+            _ = try await oauth.mintAuthorizationCode(
+                clientId: client.clientId,
+                redirectURI: "https://chatgpt.com/connector/oauth/callback",
+                codeChallenge: challenge,
+                resource: nil,
+                pairingCode: issued
+            )
+            XCTFail("pairing code must be single-use")
+        } catch OAuthError.pairingRequired {
+            // expected
+        }
+    }
+
+    func testInvalidRedirectDoesNotConsumeRegistrationQuota() async throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("wcr-oauth-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let oauth = OAuthService(issuer: "https://mcp.example.com", storeURL: tmp)
+        for _ in 0..<RegistrationLimiter.maxPerWindow {
+            do {
+                _ = try await oauth.register(clientName: "x", redirectURIs: ["http://evil.example/cb"])
+                XCTFail("expected invalidRedirect")
+            } catch OAuthError.invalidRedirect {
+                // expected
+            }
+        }
+        _ = try await oauth.register(
+            clientName: "ok",
+            redirectURIs: ["https://chatgpt.com/connector/oauth/callback"]
+        )
+    }
+
+    func testRegistrationLimitPerWindow() async throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("wcr-oauth-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        let oauth = OAuthService(issuer: "https://mcp.example.com", storeURL: tmp)
+        for i in 0..<RegistrationLimiter.maxPerWindow {
+            _ = try await oauth.register(
+                clientName: "c\(i)",
+                redirectURIs: ["https://chatgpt.com/connector/oauth/callback"]
+            )
+        }
+        do {
+            _ = try await oauth.register(
+                clientName: "overflow",
+                redirectURIs: ["https://chatgpt.com/connector/oauth/callback"]
+            )
+            XCTFail("expected registrationLimited")
+        } catch OAuthError.registrationLimited {
+            // expected
+        }
+    }
+}
+
+private final class PairingCapture: @unchecked Sendable {
+    var code: String?
+    func handle(_ value: String) { code = value }
+}
+
+final class PairingCodeTests: XCTestCase {
+    func testIssueIfNeededIsStableUntilExpiry() {
+        var state = PairingCodeState()
+        let t = Date(timeIntervalSince1970: 1_000_000)
+        let first = state.issueIfNeeded(now: t)
+        XCTAssertEqual(first?.count, 8)
+        XCTAssertNil(state.issueIfNeeded(now: t.addingTimeInterval(60)))
+        let rotated = state.issueIfNeeded(now: t.addingTimeInterval(PairingCodeState.lifetime + 1))
+        XCTAssertNotNil(rotated)
+        XCTAssertNotEqual(rotated, first)
+    }
+
+    func testConsumeIsSingleUseAndNormalizesHyphens() {
+        var state = PairingCodeState()
+        let t = Date(timeIntervalSince1970: 1_000_000)
+        let raw = state.issueIfNeeded(now: t)!
+        let pretty = String(raw.prefix(4)) + "-" + String(raw.dropFirst(4))
+        XCTAssertTrue(state.consume(pretty.lowercased(), now: t))
+        XCTAssertFalse(state.consume(pretty, now: t))
+    }
+
+    func testWrongCodeDoesNotConsumeUntilMaxFailures() {
+        var state = PairingCodeState()
+        let t = Date(timeIntervalSince1970: 1_000_000)
+        let raw = state.issueIfNeeded(now: t)!
+        for _ in 1..<PairingCodeState.maxFailures {
+            XCTAssertFalse(state.consume("ZZZZZZZZ", now: t))
+        }
+        XCTAssertTrue(state.consume(raw, now: t))
+    }
+
+    func testMaxFailuresRotateTheCode() {
+        var state = PairingCodeState()
+        let t = Date(timeIntervalSince1970: 1_000_000)
+        let raw = state.issueIfNeeded(now: t)!
+        for _ in 0..<PairingCodeState.maxFailures {
+            XCTAssertFalse(state.consume("ZZZZZZZZ", now: t))
+        }
+        XCTAssertFalse(state.consume(raw, now: t), "old code must be dead after max failures")
+    }
+
+    func testExpiredCodeFails() {
+        var state = PairingCodeState()
+        let t = Date(timeIntervalSince1970: 1_000_000)
+        let raw = state.issueIfNeeded(now: t)!
+        XCTAssertFalse(state.consume(raw, now: t.addingTimeInterval(PairingCodeState.lifetime + 1)))
+    }
+
+    func testConstantTimeEquals() {
+        XCTAssertTrue(PairingCodeState.constantTimeEquals("ABCD2345", "ABCD2345"))
+        XCTAssertFalse(PairingCodeState.constantTimeEquals("ABCD2345", "ABCD2346"))
+        XCTAssertFalse(PairingCodeState.constantTimeEquals("ABC", "ABCD2345"))
+    }
+
+    func testGenerateUsesUnambiguousAlphabet() {
+        for _ in 0..<40 {
+            let code = PairingCodeState.generate()
+            XCTAssertEqual(code.count, 8)
+            XCTAssertTrue(code.allSatisfy { PairingCodeState.alphabet.contains($0) })
+            XCTAssertFalse(code.contains("0"))
+            XCTAssertFalse(code.contains("O"))
+            XCTAssertFalse(code.contains("1"))
+            XCTAssertFalse(code.contains("I"))
+            XCTAssertFalse(code.contains("L"))
+        }
+    }
+
+    func testRegistrationLimiterCapsWindowAndTotal() {
+        var limiter = RegistrationLimiter()
+        let t = Date(timeIntervalSince1970: 1_000_000)
+        for i in 0..<RegistrationLimiter.maxPerWindow {
+            XCTAssertTrue(limiter.allow(existingClients: i, now: t), "\(i)")
+        }
+        XCTAssertFalse(limiter.allow(existingClients: RegistrationLimiter.maxPerWindow, now: t))
+        XCTAssertTrue(limiter.allow(
+            existingClients: RegistrationLimiter.maxPerWindow,
+            now: t.addingTimeInterval(RegistrationLimiter.windowSeconds + 1)
+        ))
+        XCTAssertFalse(limiter.allow(existingClients: RegistrationLimiter.maxClients, now: t))
     }
 }
 
@@ -470,6 +669,10 @@ final class RemoteHTTPBindPinTests: XCTestCase {
     }
 
     private func readPinnedSource(_ relative: String) throws -> String {
+        try Self.loadPinnedSource(relative)
+    }
+
+    static func loadPinnedSource(_ relative: String) throws -> String {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -478,5 +681,24 @@ final class RemoteHTTPBindPinTests: XCTestCase {
         let data = try Data(contentsOf: url)
         XCTAssertFalse(data.isEmpty, "pinned file missing or empty: \(relative)")
         return String(decoding: data, as: UTF8.self)
+    }
+}
+
+final class PairingCodePinTests: XCTestCase {
+    func testHTTPLayerNeverReturnsOrDisplaysTheSecret() throws {
+        let http = try RemoteHTTPBindPinTests.loadPinnedSource("Sources/WarpCommandRunner/Remote/RemoteHTTPServer.swift")
+        XCTAssertFalse(http.contains("PairingCodeDisplay"), "pairing secret must not be composed into HTTP handlers")
+        XCTAssertTrue(http.contains("name=\"pairing_code\""))
+        XCTAssertTrue(http.contains("await oauth.preparePairing()"))
+        XCTAssertTrue(http.contains("formnovalidate"))
+        let oauth = try RemoteHTTPBindPinTests.loadPinnedSource("Sources/WarpCommandRunner/Remote/OAuthService.swift")
+        XCTAssertTrue(oauth.contains("Never returns the code to HTTP callers"))
+        XCTAssertTrue(oauth.contains("pairing.consume(pairingCode)"))
+        let pairing = try RemoteHTTPBindPinTests.loadPinnedSource("Sources/WarpCommandRunner/Remote/PairingCode.swift")
+        XCTAssertTrue(pairing.contains("constantTimeEquals"))
+        XCTAssertTrue(pairing.contains("SecRandomCopyBytes"))
+        let bridge = try RemoteHTTPBindPinTests.loadPinnedSource("Sources/WarpCommandRunner/Remote/HTTPBridgeTransport.swift")
+        XCTAssertTrue(bridge.contains("func handle(body: Data, token: OAuthService.AccessToken?)"))
+        XCTAssertTrue(bridge.contains("HTTPBridgeError.unauthorized"))
     }
 }

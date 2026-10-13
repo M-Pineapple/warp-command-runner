@@ -14,8 +14,8 @@ enum RemotePolicy {
 
     /// Tools that run arbitrary shell. Over remote HTTP they are only reachable
     /// through `POST /mcp`, which requires a bearer token minted after the
-    /// pairing-code consent. `requireAuthorizedSession` re-checks that here so
-    /// no future transport can call them unauthenticated.
+    /// pairing-code consent. `requiresRemoteAuthorization` names that set so the
+    /// HTTP bridge can refuse them without an `mcp`-scoped token.
     static let shellToolNames: Set<String> = [
         "execute_pipeline",
         "ssh_execute",

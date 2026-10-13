@@ -51,12 +51,12 @@ actor HTTPBridgeTransport: Transport {
             throw HTTPBridgeError.invalidJSON
         }
         let method = obj["method"] as? String
-        guard token != nil else { throw HTTPBridgeError.unauthorized }
+        guard let token else { throw HTTPBridgeError.unauthorized }
         if method == "tools/call",
            let params = obj["params"] as? [String: Any],
            let name = params["name"] as? String,
            RemotePolicy.requiresRemoteAuthorization(name),
-           token?.scopes.contains("mcp") != true {
+           !token.scopes.contains("mcp") {
             throw HTTPBridgeError.unauthorized
         }
         let id = jsonRPCId(body)

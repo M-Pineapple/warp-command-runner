@@ -2,7 +2,7 @@
 
 **Short answer:** any app that is a **local MCP host** can spawn this binary over **stdio**. Phone apps and websites cannot spawn a process on your Mac. They can call it only if you opt into **remote MCP**: a loopback HTTP server plus a public HTTPS URL **you** create (your Cloudflare tunnel, your Tailscale Funnel, or your reverse proxy). This project does not host that URL.
 
-**Short caveat:** exposing a terminal MCP on the public internet is dangerous. Remote mode is opt-in, binds `127.0.0.1` only, uses OAuth 2.1, and refuses Warp-routing (keystroke) tools unless you turn that on. Setup: [`docs/REMOTE.md`](REMOTE.md).
+**Short caveat:** exposing a terminal MCP on the public internet is dangerous. Remote mode is opt-in, binds `127.0.0.1` only, uses OAuth 2.1 with a Mac-only pairing code (8.0.1+), and refuses Warp-routing (keystroke) tools unless you turn that on. Setup: [`docs/REMOTE.md`](REMOTE.md).
 
 This is the right tool if you chat with an AI from a **desktop or CLI host** and want that chat to read files, run commands, and drive [Warp](https://app.warp.dev/referral/G9W3EY) — without installing Cursor or Claude Code.
 

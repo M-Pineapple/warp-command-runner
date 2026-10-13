@@ -20,7 +20,7 @@ struct PairingCodeState: Sendable {
 
     /// Returns a fresh code when none is active, else nil (the current one stays valid).
     mutating func issueIfNeeded(now: Date = Date()) -> String? {
-        if let _ = code, expiresAt > now { return nil }
+        if code != nil, expiresAt > now { return nil }
         let fresh = Self.generate()
         code = fresh
         expiresAt = now.addingTimeInterval(Self.lifetime)
@@ -52,7 +52,8 @@ struct PairingCodeState: Sendable {
 
     static func generate() -> String {
         var bytes = [UInt8](repeating: 0, count: length)
-        _ = SecRandomCopyBytes(kSecRandomDefault, length, &bytes)
+        let status = SecRandomCopyBytes(kSecRandomDefault, length, &bytes)
+        precondition(status == errSecSuccess, "SecRandomCopyBytes failed: \(status)")
         // 256 % 31 != 0 introduces a negligible bias; acceptable for an 8-char,
         // single-use, rate-limited code.
         return String(bytes.map { alphabet[Int($0) % alphabet.count] })
@@ -76,7 +77,7 @@ enum PairingCodeDisplay {
     static func show(_ code: String, logger: ((String) -> Void)? = nil) {
         let pretty = String(code.prefix(4)) + "-" + String(code.dropFirst(4))
         let line = "Warp Command Runner pairing code: \(pretty) (valid 10 minutes, single use)\n"
-        FileHandle.standardError.write(Data(line.utf8))
+        try? FileHandle.standardError.write(contentsOf: Data(line.utf8))
         logger?(line.trimmingCharacters(in: .newlines))
         #if os(macOS)
         let script = "display notification \"Pairing code: \(pretty)\" with title \"Warp Command Runner\""

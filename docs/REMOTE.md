@@ -60,7 +60,7 @@ Use `https://mcp.example.com/mcp` (your hostname) as the MCP server URL.
 
 ### Grok (web, iOS, Android)
 
-Settings → Connectors → custom / Bring Your Own MCP. Paste the URL. Complete the browser Allow page. That page is served by this Mac through your tunnel.
+Settings → Connectors → custom / Bring Your Own MCP. Paste the URL. Complete the browser Allow page and type the pairing code shown on the Mac. That page is served by this Mac through your tunnel.
 
 ### ChatGPT
 
@@ -83,8 +83,9 @@ Set `remote.allowKeystrokeTools` to `true` only if you understand that a cloud m
 - Remote tool calls append to `~/.warp-command-runner/remote-audit.log`.
 - Do not check tunnel tokens, certificates, or real hostnames into git.
 - Treat any connector you add as fully trusted. This MCP can run shell commands as you, including `execute_pipeline` and `ssh_execute`. The five Warp-routing tools are the only ones refused by default.
+- Authorizing a new client requires a one-time pairing code. It is shown only on the Mac, never in an HTTP response.
 - The OAuth `resource` parameter is stored on the authorisation code and is not yet checked at token exchange. A token from this server is valid for `POST /mcp` on this process.
-- `requireMacApproval` in config is reserved. Setting it does not yet prompt on the Mac.
+- `requireMacApproval` in config is reserved. Pairing (8.0.1+) is the owner gate on Allow. That flag does not add a second prompt.
 
 ## Flags
 
