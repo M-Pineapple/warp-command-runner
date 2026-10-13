@@ -43,11 +43,22 @@ actor HTTPBridgeTransport: Transport {
     }
 
     /// Handle one HTTP JSON-RPC body. Notifications return nil (HTTP 202).
-    func handle(body: Data) async throws -> Data? {
+    /// `token` must be the access token already validated by the HTTP layer.
+    /// Shell and keystroke tools are refused without one, so every remote path
+    /// to `execute_pipeline` / `ssh_execute` passes the pairing-gated OAuth check.
+    func handle(body: Data, token: OAuthService.AccessToken?) async throws -> Data? {
         guard let obj = try JSONSerialization.jsonObject(with: body) as? [String: Any] else {
             throw HTTPBridgeError.invalidJSON
         }
         let method = obj["method"] as? String
+        guard let token else { throw HTTPBridgeError.unauthorized }
+        if method == "tools/call",
+           let params = obj["params"] as? [String: Any],
+           let name = params["name"] as? String,
+           RemotePolicy.requiresRemoteAuthorization(name),
+           !token.scopes.contains("mcp") {
+            throw HTTPBridgeError.unauthorized
+        }
         let id = jsonRPCId(body)
 
         if method == "initialize", let cached = cachedInitialize, let id {
@@ -94,4 +105,5 @@ actor HTTPBridgeTransport: Transport {
 
 enum HTTPBridgeError: Error {
     case invalidJSON
+    case unauthorized
 }

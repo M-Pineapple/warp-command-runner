@@ -138,6 +138,9 @@ final class RemoteHTTPHandler: ChannelInboundHandler, @unchecked Sendable {
                 "token_endpoint_auth_method": "none",
             ])
         } catch {
+            if case OAuthError.registrationLimited = error {
+                return oauthError(.tooManyRequests, "temporarily_unavailable", "client registration limit reached")
+            }
             return oauthError(.badRequest, "invalid_client_metadata", error.localizedDescription)
         }
     }
@@ -154,6 +157,10 @@ final class RemoteHTTPHandler: ChannelInboundHandler, @unchecked Sendable {
         guard method.uppercased() == "S256" else {
             return HTTPReply(status: .badRequest, body: Data("only S256 PKCE is supported".utf8), contentType: "text/plain")
         }
+        guard await oauth.client(id: clientId)?.redirectURIs.contains(redirect) == true else {
+            return HTTPReply(status: .badRequest, body: Data("unknown client or redirect_uri".utf8), contentType: "text/plain")
+        }
+        await oauth.preparePairing()
         let state = q("state") ?? ""
         let resource = q("resource")
         let html = consentHTML(
@@ -179,7 +186,8 @@ final class RemoteHTTPHandler: ChannelInboundHandler, @unchecked Sendable {
                 clientId: clientId,
                 redirectURI: redirect,
                 codeChallenge: challenge,
-                resource: form["resource"]
+                resource: form["resource"],
+                pairingCode: form["pairing_code"]
             )
             guard var comps = URLComponents(string: redirect) else {
                 return oauthError(.badRequest, "invalid_request", "bad redirect")
@@ -193,6 +201,12 @@ final class RemoteHTTPHandler: ChannelInboundHandler, @unchecked Sendable {
             var headers = HTTPHeaders()
             headers.add(name: "Location", value: comps.string ?? redirect)
             return HTTPReply(status: .seeOther, headers: headers, body: Data())
+        } catch OAuthError.pairingRequired {
+            return HTTPReply(
+                status: .forbidden,
+                body: Data("Wrong or expired pairing code. Check the code shown on the Mac and try again from your chat app.".utf8),
+                contentType: "text/plain"
+            )
         } catch {
             return oauthError(.badRequest, error.localizedDescription, "authorization failed")
         }
@@ -235,7 +249,7 @@ final class RemoteHTTPHandler: ChannelInboundHandler, @unchecked Sendable {
     }
 
     private func handleMCP(head: HTTPRequestHead, body: Data) async -> HTTPReply {
-        guard let raw = bearer(head), await oauth.validateAccessToken(raw) != nil else {
+        guard let raw = bearer(head), let token = await oauth.validateAccessToken(raw) else {
             var headers = HTTPHeaders()
             headers.add(
                 name: "WWW-Authenticate",
@@ -244,10 +258,12 @@ final class RemoteHTTPHandler: ChannelInboundHandler, @unchecked Sendable {
             return HTTPReply(status: .unauthorized, headers: headers, body: Data())
         }
         do {
-            if let response = try await bridge.handle(body: body) {
+            if let response = try await bridge.handle(body: body, token: token) {
                 return HTTPReply(status: .ok, body: response, contentType: "application/json")
             }
             return HTTPReply(status: .accepted, body: Data())
+        } catch HTTPBridgeError.unauthorized {
+            return HTTPReply(status: .unauthorized, body: Data("{\"error\":\"unauthorized\"}".utf8), contentType: "application/json")
         } catch {
             logger.error("MCP HTTP error: \(error)")
             return HTTPReply(status: .badRequest, body: Data("{\"error\":\"invalid_request\"}".utf8), contentType: "application/json")
@@ -316,8 +332,10 @@ final class RemoteHTTPHandler: ChannelInboundHandler, @unchecked Sendable {
         <input type="hidden" name="code_challenge" value="\(esc(challenge))">
         <input type="hidden" name="state" value="\(esc(state))">
         <input type="hidden" name="resource" value="\(esc(resource))">
+        <p>Enter the pairing code shown on the Mac (notification and the Terminal running <code>--http</code>). It is single use and expires in 10 minutes.</p>
+        <p><input name="pairing_code" autocomplete="off" autocapitalize="characters" spellcheck="false" required aria-label="Pairing code"></p>
         <button type="submit" name="decision" value="allow">Allow</button>
-        <button type="submit" name="decision" value="deny">Deny</button>
+        <button type="submit" name="decision" value="deny" formnovalidate>Deny</button>
         </form></body></html>
         """
     }

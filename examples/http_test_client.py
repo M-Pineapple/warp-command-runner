@@ -8,10 +8,12 @@ import hashlib
 import http.client
 import json
 import os
+import re
 import secrets
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.parse
 
@@ -40,6 +42,18 @@ def req(port: int, method: str, path: str, data=None, headers=None, form=False):
     status = resp.status
     conn.close()
     return status, hdr, raw
+
+
+def wait_pairing_code(lines: list[str], timeout: float = 8.0) -> str:
+    pat = re.compile(r"pairing code: ([A-Z0-9]{4}-[A-Z0-9]{4})", re.I)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        blob = "".join(lines)
+        match = pat.search(blob)
+        if match:
+            return match.group(1)
+        time.sleep(0.05)
+    raise RuntimeError(f"pairing code never appeared on stderr: {''.join(lines)!r}")
 
 
 def wait_health(port: int, deadline: float) -> None:
@@ -73,6 +87,14 @@ def main() -> int:
         stderr=subprocess.PIPE,
         text=True,
     )
+    stderr_lines: list[str] = []
+
+    def pump_stderr() -> None:
+        assert proc.stderr is not None
+        for line in proc.stderr:
+            stderr_lines.append(line)
+
+    threading.Thread(target=pump_stderr, daemon=True).start()
     try:
         wait_health(port, time.monotonic() + 15)
 
@@ -96,6 +118,45 @@ def main() -> int:
             .rstrip(b"=")
             .decode()
         )
+        authorize_query = urllib.parse.urlencode(
+            {
+                "response_type": "code",
+                "client_id": client_id,
+                "redirect_uri": "http://127.0.0.1/cb",
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+                "state": "s1",
+                "resource": f"http://127.0.0.1:{port}/mcp",
+            }
+        )
+        st, _, html = req(port, "GET", f"/authorize?{authorize_query}")
+        if st != 200:
+            raise RuntimeError(f"authorize GET failed {st}: {html!r}")
+        page = html.decode("utf-8", "replace")
+        if 'name="pairing_code"' not in page:
+            raise RuntimeError("Allow page missing pairing_code field")
+        pairing = wait_pairing_code(stderr_lines)
+        compact = pairing.replace("-", "")
+        if pairing in page or compact in page:
+            raise RuntimeError("pairing code leaked in HTTP response")
+
+        st, _, raw = req(
+            port,
+            "POST",
+            "/authorize",
+            {
+                "decision": "allow",
+                "client_id": client_id,
+                "redirect_uri": "http://127.0.0.1/cb",
+                "code_challenge": challenge,
+                "state": "s1",
+                "resource": f"http://127.0.0.1:{port}/mcp",
+            },
+            form=True,
+        )
+        if st != 403:
+            raise RuntimeError(f"consent without pairing code should be 403, got {st}: {raw!r}")
+
         st, hdrs, raw = req(
             port,
             "POST",
@@ -107,6 +168,7 @@ def main() -> int:
                 "code_challenge": challenge,
                 "state": "s1",
                 "resource": f"http://127.0.0.1:{port}/mcp",
+                "pairing_code": pairing,
             },
             form=True,
         )

@@ -16,6 +16,10 @@ This is for people who **don't live in Cursor or Claude Code**. If you already c
 
 **Can any cloud AI use this?** Any **local MCP host** can, over stdio. Phone apps and websites need **remote MCP**: you run `--http` and publish HTTPS with a tunnel **you** own. Guide: [`docs/REMOTE.md`](docs/REMOTE.md). Matrix: [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
+## What's new in v8.0.1 — remote pairing code
+
+Remote `--http` mode requires a one-time pairing code shown on the Mac before a new client can be authorized. Remote-mode users should update and delete `~/.warp-command-runner/oauth-store.json` to re-pair. Details: [`docs/REMOTE.md`](docs/REMOTE.md).
+
 ## Quick start
 
 You need macOS 13 or later, Swift 6.0+ (Xcode 16+), and a local MCP host such as Warp Agent or Claude Desktop.
@@ -278,6 +282,8 @@ cp -R .build/release/warp-command-runner.app "/Applications/Warp Command Runner.
 ```
 
 Then restart your MCP host. If you upgraded from v6 and kept the same signing certificate, existing TCC grants on `com.m-pineapple.claude-command-runner` do **not** transfer to `com.m-pineapple.warp-command-runner` — re-grant Accessibility / Input Monitoring / Full Disk Access / Automation for the new bundle once. After that, same-cert rebuilds keep the grants.
+
+If you use remote `--http` mode, delete `~/.warp-command-runner/oauth-store.json` after installing 8.0.1 and connect again so the new pairing code is required.
 
 ### 🛡️ macOS Sequoia full setup recipe (the 7 ordered steps)
 
@@ -619,6 +625,9 @@ SSH profiles are stored at `~/.warp-command-runner/ssh_profiles.json`.
 
 ### Q: Can Grok, ChatGPT, or Gemini use this — not just Claude?
 **A:** Yes, if you chat inside a **local MCP host**. Warp's agent panel is the usual path: set Warp's model to Grok (or GPT, Claude, Gemini) and register this server in `~/.warp/.mcp.json`. ChatGPT desktop and Claude Desktop work the same way. **Browser** tabs on grok.com / chatgpt.com / claude.ai cannot launch a local process. Full matrix: [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
+
+### Q: What's new in v8.0.1?
+**A:** Remote `--http` mode now requires a one-time pairing code shown on the Mac to authorize a new client. Update, then delete `~/.warp-command-runner/oauth-store.json` and connect again. See [docs/REMOTE.md](docs/REMOTE.md).
 
 ### Q: What's new in v8.0.0?
 **A:** Opt-in remote MCP. `warp-command-runner --http` serves Streamable HTTP on loopback with OAuth 2.1. You publish HTTPS with your own tunnel. Phone and website connectors can then call this Mac. Keystroke tools stay off remotely. See [docs/REMOTE.md](docs/REMOTE.md).

@@ -12,6 +12,19 @@ enum RemotePolicy {
         "send_to_session",
     ]
 
+    /// Tools that run arbitrary shell. Over remote HTTP they are only reachable
+    /// through `POST /mcp`, which requires a bearer token minted after the
+    /// pairing-code consent. `requiresRemoteAuthorization` names that set so the
+    /// HTTP bridge can refuse them without an `mcp`-scoped token.
+    static let shellToolNames: Set<String> = [
+        "execute_pipeline",
+        "ssh_execute",
+    ]
+
+    static func requiresRemoteAuthorization(_ tool: String) -> Bool {
+        shellToolNames.contains(tool) || keystrokeToolNames.contains(tool)
+    }
+
     static func denial(for tool: String, allowKeystrokeTools: Bool) -> String? {
         guard !allowKeystrokeTools, keystrokeToolNames.contains(tool) else {
             return nil

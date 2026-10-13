@@ -898,7 +898,11 @@ struct WarpCommandRunner: AsyncParsableCommand {
                     RemoteAuditLog.append(tool: params.name, allowed: false, detail: "keystroke-gated")
                     return CallTool.Result(content: [.text(denial)], isError: true)
                 }
-                RemoteAuditLog.append(tool: params.name, allowed: true, detail: "")
+                RemoteAuditLog.append(
+                    tool: params.name,
+                    allowed: true,
+                    detail: RemotePolicy.shellToolNames.contains(params.name) ? "shell;token-authorized" : ""
+                )
             }
 
             switch params.name {
@@ -1012,6 +1016,10 @@ struct WarpCommandRunner: AsyncParsableCommand {
             let issuer = (config.remote.publicBaseURL?.trimmingCharacters(in: CharacterSet(charactersIn: "/"))).flatMap { $0.isEmpty ? nil : $0 }
                 ?? "http://127.0.0.1:\(listenPort)"
             let oauth = OAuthService(issuer: issuer)
+            let pairingLogger = logger
+            await oauth.setPairingDisplay { code in
+                PairingCodeDisplay.show(code) { pairingLogger.notice("\($0)") }
+            }
             let bridge = HTTPBridgeTransport(logger: logger)
             mcpService = MCPService(server: server, transport: bridge)
             let httpServer = RemoteHTTPServer(
