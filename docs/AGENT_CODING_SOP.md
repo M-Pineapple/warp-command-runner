@@ -119,8 +119,8 @@ the practices below were missing.
    7. **Non-acceptance** — manual restart, folklore, or "it worked on the
       already-warm environment" is not an acceptance path.
    Unknown answers are stated as gaps: close them in the same change or record
-   deferred debt with an owner. Silence is not coverage. (House skill mirror:
-   `cv-agent-governance/skills/engineering-sop` § Ship preflight.)
+   deferred debt with an owner. Silence is not coverage. (Mirrors the maintainer's internal
+   engineering SOP, Ship preflight section.)
 5. **On-target runtime soak, run by the agent, BEFORE hand-off** — the operator is
    never the test environment. UI-bearing changes: ≥60 min on the target OS,
    including the hostile states (background/inactive, multi-display, live data
