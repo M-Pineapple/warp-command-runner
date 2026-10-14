@@ -622,7 +622,7 @@ func handleRunTemplate(params: CallTool.Parameters, logger: Logger, config: Conf
     let result = try await handleExecuteWithAutoRetrieveEnhanced(params: executeParams, logger: logger, config: config)
     
     // Prepend template info
-    if case .text(let resultText) = result.content.first {
+    if case .text(let resultText, _, _) = result.content.first {
         return CallTool.Result(
             content: [.text("""
             📋 Running template: \(name)

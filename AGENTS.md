@@ -20,7 +20,7 @@ SwiftPM CLI + MCP. Match existing files. ArgumentParser for flags. Agent workflo
 
 Run from the repo root on macOS. Quote the summary lines. Triage every failure. There is no Xcode project; skip `xcodebuild`.
 
-1. `swift package resolve && ./scripts/patch-swift-sdk.sh && swift build && swift test`
+1. `swift package resolve && swift build && swift test`
    Green: `Test Suite 'All tests' passed` with 0 failures.
 2. `swift build -c release`
    Green: `.build/release/warp-command-runner` exists.
@@ -34,7 +34,7 @@ Run from the repo root on macOS. Quote the summary lines. Triage every failure. 
 
 Known failures: none. `ProcessRunnerTests.testTimeoutTerminatesHungProcess` waits on a real hung child (timeout API), not a test `sleep`.
 
-Whole-tree hazard: `scripts/patch-swift-sdk.sh` is required while pinned to swift-sdk 0.10.x. `swift test` without the patch fails to compile the SDK.
+Dependencies: `Package.resolved` is committed; swift-sdk is on 0.12.x, which compiles under Swift 6.4 without the old `patch-swift-sdk.sh`. `DependencyFloorTests` fails if the lockfile drops below the floors. After `swift package update`, commit the new `Package.resolved`.
 
 `--port` was removed in v6. Use `--http-port` for the loopback listener.
 

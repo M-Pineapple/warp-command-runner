@@ -15,7 +15,7 @@ func handleExecuteWithAutoRetrieveEnhanced(params: CallTool.Parameters, logger: 
     
     // Extract command ID from the result text
     var resultText = ""
-    if case .text(let text) = executeResult.content.first {
+    if case .text(let text, _, _) = executeResult.content.first {
         resultText = text
     }
     let commandId = extractCommandId(from: resultText)
@@ -45,7 +45,7 @@ func handleExecuteWithAutoRetrieveEnhanced(params: CallTool.Parameters, logger: 
             let outputResult = await handleGetCommandOutput(params: outputParams, logger: logger)
             
             // Check if we got actual output
-            if case .text(let outputText) = outputResult.content.first,
+            if case .text(let outputText, _, _) = outputResult.content.first,
                !outputText.contains("No output found for command ID") {
                 
                 // Success! Return combined result
