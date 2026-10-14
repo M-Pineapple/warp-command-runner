@@ -11,14 +11,9 @@ echo "================================"
 echo "Cleaning previous builds..."
 swift package clean
 
-# Resolve dependencies (so .build/checkouts/swift-sdk exists for the patch step)
+# Resolve dependencies from the committed Package.resolved
 echo "Resolving dependencies..."
 swift package resolve
-
-# Apply the swift-sdk strict-concurrency patch (idempotent; required while
-# pinned to swift-sdk 0.10.x — see scripts/patch-swift-sdk.sh).
-echo "Applying swift-sdk patch..."
-./scripts/patch-swift-sdk.sh
 
 # Build in release mode
 echo "Building in release mode..."

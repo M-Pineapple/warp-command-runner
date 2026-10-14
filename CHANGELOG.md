@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Build: swift-sdk updated from 0.10.x to 0.12.1, which compiles under Swift 6.4 without a local patch. `scripts/patch-swift-sdk.sh` is retired and `build.sh` no longer patches dependencies.
+- Build: `Package.resolved` is now committed so fresh clones resolve the same dependency versions. `DependencyFloorTests` fails if Package.swift or the lockfile drop below swift-sdk 0.12.1 or swift-nio 2.100.0.
 - README: badge row (licence, Swift/macOS, stars), a short Quick start from `./build.sh`, and a 'More MCP servers by M-Pineapple' block. Buy Me A Coffee is unchanged.
 
 ## [8.0.1] - 2026-10-13
