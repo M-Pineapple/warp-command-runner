@@ -338,7 +338,7 @@ final class AppIdentityTests: XCTestCase {
         XCTAssertEqual(AppIdentity.displayName, "Warp Command Runner")
         XCTAssertEqual(AppIdentity.commandName, "warp-command-runner")
         XCTAssertEqual(AppIdentity.bundleIdentifier, "com.m-pineapple.warp-command-runner")
-        XCTAssertEqual(AppIdentity.version, "8.0.1")
+        XCTAssertEqual(AppIdentity.version, "8.0.2")
         XCTAssertFalse(AppIdentity.commandName.contains("claude"))
         XCTAssertFalse(AppIdentity.bundleIdentifier.contains("claude"))
         XCTAssertFalse(AppIdentity.configDirectoryName.contains("claude"))
