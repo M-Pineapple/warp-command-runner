@@ -223,6 +223,12 @@ export WCR_CODESIGN_IDENTITY="<your-cert-sha1>"   # optional if auto-detect find
 ```
 > Only need the 34 non-keystroke tools (incl. `execute_pipeline`)? An unsigned build is fine — skip the `export`.
 
+   `./build.sh` writes two things: the app bundle `.build/release/warp-command-runner.app` (use this) and the bare binary `.build/release/warp-command-runner`. It does **not** install anything into `/Applications/`. To use the `/Applications/` paths in the snippets below, copy the bundle there yourself:
+   ```bash
+   cp -R .build/release/warp-command-runner.app "/Applications/Warp Command Runner.app"
+   ```
+   Or skip the copy and point your host at `$(pwd)/.build/release/warp-command-runner.app/Contents/MacOS/warp-command-runner` (the 5 keystroke-routing tools need the bundle in `/Applications/`; see the Sequoia recipe below).
+
 2. **Pick your MCP host(s)** — you can register the same binary in several. Point at the binary **inside** the `.app` bundle (macOS Sequoia+ needs the Info.plist for TCC prompts on the 5 keystroke-routing tools):
 
    **A — Warp Agent** (`~/.warp/.mcp.json`) — Grok, ChatGPT, Claude, Gemini, whichever Warp is set to:
