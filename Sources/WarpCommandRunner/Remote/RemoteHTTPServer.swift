@@ -1,4 +1,5 @@
 import Foundation
+import WCRIdentity
 import NIOCore
 import NIOHTTP1
 import NIOPosix

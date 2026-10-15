@@ -1,4 +1,5 @@
 import Foundation
+import WCRIdentity
 import ArgumentParser
 import MCP
 import Logging

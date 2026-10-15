@@ -53,7 +53,7 @@ Restart the host. Ask it to run `swift --version`. That uses `execute_pipeline` 
 
 ### Data directory
 
-Config, command history, templates, and SSH profiles live in `~/.warp-command-runner`. Set `WCR_HOME` to use a different folder (absolute path, or `~/…`). macOS ignores a process-level `HOME=` for `FileManager.homeDirectoryForCurrentUser`, so `WCR_HOME` is the supported override.
+Config, command history, templates, and SSH profiles live in `~/.warp-command-runner`. Set `WCR_HOME` to use a different folder. The value must be an absolute path or start with `~/`. Relative values are ignored. macOS ignores a process-level `HOME=` for `FileManager.homeDirectoryForCurrentUser`, so `WCR_HOME` is the supported override. The folder is created with owner-only permissions (`0700`). ConfigManager uses the same resolution.
 
 ```json
 {
@@ -62,14 +62,14 @@ Config, command history, templates, and SSH profiles live in `~/.warp-command-ru
       "command": "/absolute/path/to/warp-command-runner/.build/release/warp-command-runner.app/Contents/MacOS/warp-command-runner",
       "args": [],
       "env": {
-        "WCR_HOME": "/tmp/wcr-isolated"
+        "WCR_HOME": "~/wcr-test"
       }
     }
   }
 }
 ```
 
-When `WCR_HOME` is set, the server does not copy `~/.claude-command-runner` into that folder.
+When `WCR_HOME` is set to a valid path, the server does not copy `~/.claude-command-runner` into that folder.
 
 An unsigned build is enough for the 34 non-keystroke tools. The five Warp-routing tools need a signed `.app` in `/Applications/`. Host snippets, signing, and the Sequoia recipe are under [Installation](#installation). Phone and website hosts need `--http` plus your own HTTPS tunnel. See [`docs/REMOTE.md`](docs/REMOTE.md).
 

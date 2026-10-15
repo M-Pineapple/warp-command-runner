@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `WCR_HOME` environment variable overrides the data folder. The default remains `~/.warp-command-runner`. Isolated folders skip the legacy `~/.claude-command-runner` copy.
+- `WCR_HOME` environment variable overrides the data folder. The default remains `~/.warp-command-runner`. Isolated folders skip the legacy `~/.claude-command-runner` copy. ConfigManager uses the same `AppPaths` resolution. Relative `WCR_HOME` values are ignored. The folder is created with owner-only permissions (`0700`). README example is `~/wcr-test`.
 
 ### Changed
 

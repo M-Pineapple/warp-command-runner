@@ -1,16 +1,13 @@
 #!/usr/bin/env swift
 
 import Foundation
+import WCRIdentity
 
-// Simple CLI for managing Warp Command Runner configuration
+// Simple CLI for managing Warp Command Runner configuration.
+// Data folder comes from AppPaths (same WCR_HOME rules as the MCP server).
 
 func resolvedConfigDirectory() -> URL {
-    let home = FileManager.default.homeDirectoryForCurrentUser
-    let current = home.appendingPathComponent(".warp-command-runner")
-    let legacy = home.appendingPathComponent(".claude-command-runner")
-    if FileManager.default.fileExists(atPath: current.path) { return current }
-    if FileManager.default.fileExists(atPath: legacy.path) { return legacy }
-    return current
+    AppPaths.configDirectory
 }
 
 let configDirectory = resolvedConfigDirectory()
@@ -107,11 +104,7 @@ func resetConfig() {
 }
 
 func createDefaultConfig() {
-    try? FileManager.default.createDirectory(
-        at: configDirectory,
-        withIntermediateDirectories: true,
-        attributes: nil
-    )
+    AppPaths.ensureConfigDirectory(at: configDirectory)
     
     let defaultConfig = """
     {
