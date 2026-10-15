@@ -14,7 +14,7 @@ public enum AppIdentity {
     public static let displayName = "Warp Command Runner"
     public static let commandName = "warp-command-runner"
     public static let bundleIdentifier = "com.m-pineapple.warp-command-runner"
-    public static let version = "8.0.2"
+    public static let version = "8.0.3"
     public static let loggerLabel = "com.warp-command-runner"
 
     public static let configDirectoryName = ".warp-command-runner"
