@@ -106,7 +106,7 @@ func handleExecuteCommandV2NoMonitoring(params: CallTool.Parameters, logger: Log
     do {
         try scriptContent.write(toFile: tempScriptFile, atomically: true, encoding: .utf8)
         // Make script executable
-        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tempScriptFile)
+        try FileManager.default.setAttributes([.posixPermissions: TempFiles.scriptPOSIXPermissions], ofItemAtPath: tempScriptFile)
     } catch {
         logger.error("Failed to write script file: \(error)")
         return CallTool.Result(
@@ -117,7 +117,7 @@ func handleExecuteCommandV2NoMonitoring(params: CallTool.Parameters, logger: Log
 
     // Send to terminal using AppleScript (via the shared runner: concurrent
     // pipe drain + timeout, and no cooperative-pool blocking)
-    let bashCommand = "bash \(tempScriptFile)"
+    let bashCommand = "bash \"\(escapeForDoubleQuotedShell(tempScriptFile))\""
     let appleScript = createAppleScript(for: preferredTerminal, command: bashCommand)
 
     do {

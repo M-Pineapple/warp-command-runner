@@ -735,7 +735,7 @@ For longer commands, use `execute_with_streaming` instead.
 **A:** Yes, basic command execution works with any terminal. Automatic output capture and Warp-specific features (deeplinks, OSC 777, agent panel) need Warp. Download it from [warp.dev](https://app.warp.dev/referral/G9W3EY).
 
 ### Q: Is it secure to let an AI run commands?
-**A:** Commands are sent directly to your terminal and execute automatically — there is no manual "press Enter" step. Configure blocked commands in `~/.warp-command-runner/config.json`. Only attach this MCP to a host you trust. Do not expose it as a public HTTP server.
+**A:** Commands are sent directly to your terminal and execute automatically — there is no manual "press Enter" step. Configure blocked commands in `~/.warp-command-runner/config.json`. The blocked-commands list catches common mistakes; it is not a security boundary, because a determined caller can rephrase or encode a command. Only attach this MCP to a host you trust. Do not expose it as a public HTTP server.
 
 ### Q: What happens if a pipeline step fails?
 **A:** Depends on the `on_fail` setting:

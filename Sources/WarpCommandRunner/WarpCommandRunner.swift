@@ -1119,7 +1119,7 @@ func handleGetCommandOutput(params: CallTool.Parameters, logger: Logger) async -
     if result == nil {
         var outputFile: String? = nil
         if commandId == "last" {
-            let tempDir = "/tmp"
+            let tempDir = TempFiles.directoryPath
             outputFile = (try? FileManager.default.contentsOfDirectory(atPath: tempDir))?
                 .filter {
                     ($0.hasPrefix(AppIdentity.outputPrefix) || $0.hasPrefix(AppIdentity.legacyOutputPrefix))
@@ -1210,7 +1210,7 @@ func handleGetCommandOutput(params: CallTool.Parameters, logger: Logger) async -
         }
 
         // List available output files for debugging
-        let tempDir = "/tmp"
+        let tempDir = TempFiles.directoryPath
         let files = try? FileManager.default.contentsOfDirectory(atPath: tempDir)
             .filter {
                 ($0.hasPrefix(AppIdentity.outputPrefix) || $0.hasPrefix(AppIdentity.legacyOutputPrefix))

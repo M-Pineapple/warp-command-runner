@@ -5,6 +5,17 @@ All notable changes to Warp Command Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- Command scripts and captured output now go to a private scratch folder inside the data folder (`<data folder>/tmp`, owner-only `0700`) instead of the shared `/tmp`. Scripts are written owner-only and run with `umask 077`.
+- `execute_pipeline` and `execute_with_streaming` now apply the blocked-commands policy, and the check is less sensitive to spacing and flag order. The list is a guard against mistakes, not a security boundary; the README now says so.
+- The remote HTTP server caps request bodies at 1 MiB and answers larger requests with 413.
+- `WCR_HOME` no longer accepts the filesystem root or your home folder itself (for example `~` or `/`), so the `0700` lock-down can't apply to them.
+
+Details are in a private advisory and will be published after release.
+
 ## [8.0.3] - 2026-10-15
 
 ### Added

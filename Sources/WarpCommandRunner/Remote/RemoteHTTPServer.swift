@@ -51,6 +51,33 @@ final class RemoteHTTPServer: @unchecked Sendable {
     }
 }
 
+/// Caps how much of a request body the remote server will buffer.
+struct RequestBodyLimiter: Sendable {
+    static let defaultMaxBytes = 1 << 20  // 1 MiB
+
+    let maxBytes: Int
+    private(set) var received = 0
+    private(set) var exceeded = false
+
+    init(maxBytes: Int = RequestBodyLimiter.defaultMaxBytes) {
+        self.maxBytes = maxBytes
+    }
+
+    /// Reject up front when the client declares a body that is too big.
+    mutating func begin(declaredLength: Int?) {
+        received = 0
+        exceeded = (declaredLength ?? 0) > maxBytes
+    }
+
+    /// Returns false once the running total passes the cap.
+    mutating func accept(byteCount: Int) -> Bool {
+        if exceeded { return false }
+        received += byteCount
+        if received > maxBytes { exceeded = true }
+        return !exceeded
+    }
+}
+
 final class RemoteHTTPHandler: ChannelInboundHandler, @unchecked Sendable {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
@@ -61,6 +88,7 @@ final class RemoteHTTPHandler: ChannelInboundHandler, @unchecked Sendable {
     private let issuer: String
     private var head: HTTPRequestHead?
     private var buffer = ByteBuffer()
+    private var limiter = RequestBodyLimiter()
 
     init(logger: Logger, oauth: OAuthService, bridge: HTTPBridgeTransport, issuer: String) {
         self.logger = logger
@@ -74,10 +102,23 @@ final class RemoteHTTPHandler: ChannelInboundHandler, @unchecked Sendable {
         case .head(let requestHead):
             head = requestHead
             buffer.clear()
+            limiter.begin(declaredLength: requestHead.headers["content-length"].first.flatMap { Int($0) })
         case .body(var part):
-            buffer.writeBuffer(&part)
+            if limiter.accept(byteCount: part.readableBytes) {
+                buffer.writeBuffer(&part)
+            } else {
+                buffer.clear()
+            }
         case .end:
             guard let head else { return }
+            if limiter.exceeded {
+                buffer.clear()
+                var headers = HTTPHeaders()
+                headers.add(name: "Connection", value: "close")
+                writeReply(HTTPReply(status: .payloadTooLarge, headers: headers, body: Data("{\"error\":\"request_too_large\"}".utf8)), context: context)
+                context.close(promise: nil)
+                return
+            }
             let body = buffer.readData(length: buffer.readableBytes) ?? Data()
             let promise = context.eventLoop.makePromise(of: HTTPReply.self)
             promise.completeWithTask {

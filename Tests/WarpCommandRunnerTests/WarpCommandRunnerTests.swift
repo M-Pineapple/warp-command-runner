@@ -313,14 +313,14 @@ final class OutputCaptureScriptTests: XCTestCase {
         try script.write(toFile: scriptPath, atomically: true, encoding: .utf8)
         defer {
             try? FileManager.default.removeItem(atPath: scriptPath)
-            try? FileManager.default.removeItem(atPath: "/tmp/wcr_output_\(commandId).json")
-            try? FileManager.default.removeItem(atPath: "/tmp/wcr_output_\(commandId).json.complete")
+            try? FileManager.default.removeItem(atPath: TempFiles.outputPath(commandId: commandId))
+            try? FileManager.default.removeItem(atPath: TempFiles.outputPath(commandId: commandId) + ".complete")
         }
 
         let run = try await runProcess(executablePath: "/bin/bash", arguments: [scriptPath], timeout: 30)
         XCTAssertEqual(run.exitCode, 7, "Capture script must propagate the command's exit code")
 
-        let data = try Data(contentsOf: URL(fileURLWithPath: "/tmp/wcr_output_\(commandId).json"))
+        let data = try Data(contentsOf: URL(fileURLWithPath: TempFiles.outputPath(commandId: commandId)))
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let result = try decoder.decode(CommandExecutionResult.self, from: data)
@@ -353,9 +353,10 @@ final class AppIdentityTests: XCTestCase {
     }
 
     func testTempFileHelpersUseCurrentPrefix() {
-        XCTAssertEqual(TempFiles.outputPath(commandId: "abc"), "/tmp/wcr_output_abc.json")
-        XCTAssertEqual(TempFiles.scriptPath(commandId: "abc"), "/tmp/wcr_script_abc.sh")
-        XCTAssertEqual(TempFiles.streamLogPath(commandId: "abc"), "/tmp/wcr_stream_abc.log")
+        let dir = TempFiles.directoryPath
+        XCTAssertEqual(TempFiles.outputPath(commandId: "abc"), "\(dir)/wcr_output_abc.json")
+        XCTAssertEqual(TempFiles.scriptPath(commandId: "abc"), "\(dir)/wcr_script_abc.sh")
+        XCTAssertEqual(TempFiles.streamLogPath(commandId: "abc"), "\(dir)/wcr_stream_abc.log")
         let needles = TempFiles.scriptNeedle(commandId: "abc")
         XCTAssertTrue(needles.contains("wcr_script_abc"))
         XCTAssertTrue(needles.contains("claude_script_abc"))
