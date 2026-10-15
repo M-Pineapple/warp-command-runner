@@ -60,7 +60,7 @@ actor ShellShimEventBus {
 
     /// Find the most recent `command_finished` event whose command line
     /// references the given command id. `execute_command` injects
-    /// `bash /tmp/wcr_script_<id>.sh`, so the shim observes that path —
+    /// `bash "<scratch folder>/wcr_script_<id>.sh"`, so the shim observes that path —
     /// letting us confirm completion and read the authoritative shell exit code.
     func finishedEvent(forCommandId id: String) -> ShellShimEvent? {
         let needles = TempFiles.scriptNeedle(commandId: id)

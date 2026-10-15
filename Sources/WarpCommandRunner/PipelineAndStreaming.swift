@@ -107,6 +107,18 @@ func handleExecutePipeline(params: CallTool.Parameters, logger: Logger, config: 
         )
     }
     
+    // Same policy as execute_command: check each step and its cd prefix.
+    for step in steps {
+        let full = step.workingDirectory.map { "cd \"\($0)\" && \(step.command)" } ?? step.command
+        if config.isCommandBlocked(step.command) || config.isCommandBlocked(full) {
+            logger.warning("Blocked pipeline step: \(step.command)")
+            return CallTool.Result(
+                content: [.text("🚫 Pipeline step blocked by security policy.")],
+                isError: true
+            )
+        }
+    }
+
     logger.info("Starting pipeline with \(steps.count) steps")
     
     // Execute pipeline
@@ -323,6 +335,15 @@ func handleExecuteWithStreaming(params: CallTool.Parameters, logger: Logger, con
     // Get max duration (default 120 seconds) — accepts JSON numbers and strings
     let maxDuration: Int = intArgument(arguments["max_duration"]) ?? 120
     
+    let streamFull = workingDirectory.map { "cd \"\($0)\" && \(commandString)" } ?? commandString
+    if config.isCommandBlocked(commandString) || config.isCommandBlocked(streamFull) {
+        logger.warning("Blocked streaming command: \(commandString)")
+        return CallTool.Result(
+            content: [.text("🚫 Command blocked by security policy.")],
+            isError: true
+        )
+    }
+
     logger.info("Starting streaming execution: \(commandString)")
     logger.info("Update interval: \(updateInterval)s, Max duration: \(maxDuration)s")
     
@@ -353,15 +374,16 @@ func handleExecuteWithStreaming(params: CallTool.Parameters, logger: Logger, con
     let preferredTerminal = config.getPreferredTerminal() ?? TerminalConfig.getPreferredTerminal()
     let scriptContent = """
     #!/bin/bash
+    umask 077
     \(wrappedCommand)
     """
     
     let tempScript = TempFiles.streamScriptPath(commandId: commandId)
     try scriptContent.write(toFile: tempScript, atomically: true, encoding: .utf8)
-    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tempScript)
+    try FileManager.default.setAttributes([.posixPermissions: TempFiles.scriptPOSIXPermissions], ofItemAtPath: tempScript)
     
     // Execute via AppleScript
-    let appleScript = createAppleScript(for: preferredTerminal, command: "bash \(tempScript)")
+    let appleScript = createAppleScript(for: preferredTerminal, command: "bash \"\(escapeForDoubleQuotedShell(tempScript))\"")
     
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")

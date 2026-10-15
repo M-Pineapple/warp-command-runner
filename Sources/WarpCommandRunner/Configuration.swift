@@ -316,7 +316,12 @@ public class ConfigurationManager {
 /// Extension for accessing configuration in command handlers
 extension Configuration {
     /// Check if a command is blocked
-    public func isCommandBlocked(_ command: String) -> Bool {
+    public func isCommandBlocked(_ rawCommand: String) -> Bool {
+        // Collapse whitespace runs so "rm  -rf /" matches "rm -rf /".
+        let command = rawCommand.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
+        if Self.isRecursiveForceRemoveOfRoot(command) {
+            return true
+        }
         // Check exact matches
         for blocked in security.blockedCommands {
             if command.contains(blocked) {
@@ -337,6 +342,41 @@ extension Configuration {
         return false
     }
     
+    /// Built-in check for `rm` with recursive + force flags (any order or
+    /// spelling) aimed at `/` or `/*`. The blocklist is a speed bump against
+    /// mistakes, not a security boundary.
+    static func isRecursiveForceRemoveOfRoot(_ command: String) -> Bool {
+        let separators: Set<String> = [";", "&&", "||", "|", "&", ";;"]
+        let spaced = command.replacingOccurrences(
+            of: "([;&|]+)", with: " $1 ", options: .regularExpression
+        )
+        let tokens = spaced.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        var i = 0
+        while i < tokens.count {
+            let tok = tokens[i].trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+            if tok == "rm" || tok.hasSuffix("/rm") {
+                var recursive = false, force = false, rootTarget = false
+                var j = i + 1
+                while j < tokens.count, !separators.contains(tokens[j]) {
+                    let a = tokens[j].trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+                    if a == "--recursive" { recursive = true }
+                    else if a == "--force" { force = true }
+                    else if a.hasPrefix("-"), !a.hasPrefix("--") {
+                        if a.contains("r") || a.contains("R") { recursive = true }
+                        if a.contains("f") { force = true }
+                    } else if ["/", "/*", "/.", "//"].contains(a) || a.hasPrefix("/*") {
+                        rootTarget = true
+                    }
+                    j += 1
+                }
+                if recursive && force && rootTarget { return true }
+                i = j
+            }
+            i += 1
+        }
+        return false
+    }
+
     /// Check if a command requires confirmation
     public func requiresConfirmation(_ command: String) -> Bool {
         for pattern in security.requireConfirmation {

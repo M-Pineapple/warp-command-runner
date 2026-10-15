@@ -60,25 +60,32 @@ public enum AppPaths {
         environment: [String: String],
         userHome: URL = FileManager.default.homeDirectoryForCurrentUser
     ) -> URL {
-        if let override = resolvedHomeOverride(environment: environment) {
+        if let override = resolvedHomeOverride(environment: environment, userHome: userHome) {
             return override
         }
         return userHome.appendingPathComponent(AppIdentity.configDirectoryName)
     }
 
     /// Non-nil when `WCR_HOME` is set to an absolute path or `~/…`.
-    public static func resolvedHomeOverride(environment: [String: String]) -> URL? {
+    /// The filesystem root and the user's home folder itself are refused,
+    /// because the data folder is locked down to `0700`.
+    public static func resolvedHomeOverride(
+        environment: [String: String],
+        userHome: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> URL? {
         guard let raw = environment[homeOverrideEnvironmentKey]?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             !raw.isEmpty
         else {
             return nil
         }
-        if raw == "~" || raw.hasPrefix("~/") || raw.hasPrefix("/") {
-            let expanded = (raw as NSString).expandingTildeInPath
-            return URL(fileURLWithPath: expanded, isDirectory: true)
+        guard raw.hasPrefix("~/") || raw.hasPrefix("/") else { return nil }
+        let expanded = ((raw as NSString).expandingTildeInPath as NSString).standardizingPath
+        let home = (userHome.path as NSString).standardizingPath
+        if expanded == "/" || expanded.isEmpty || expanded == home {
+            return nil
         }
-        return nil
+        return URL(fileURLWithPath: expanded, isDirectory: true)
     }
 
     public static func usesHomeOverride(
@@ -161,36 +168,55 @@ public enum AppPaths {
 }
 
 public enum TempFiles {
+    /// Per-user scratch folder (`<data folder>/tmp`, mode 0700). Command
+    /// scripts and captured output live here instead of the shared `/tmp`.
+    public static func directory(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        userHome: URL = FileManager.default.homeDirectoryForCurrentUser,
+        fileManager: FileManager = .default
+    ) -> URL {
+        let dir = AppPaths.configDirectory(environment: environment, userHome: userHome)
+            .appendingPathComponent("tmp", isDirectory: true)
+        AppPaths.ensureConfigDirectory(at: dir.deletingLastPathComponent(), fileManager: fileManager)
+        AppPaths.ensureConfigDirectory(at: dir, fileManager: fileManager)
+        return dir
+    }
+
+    public static var directoryPath: String { directory().path }
+
+    /// File mode for scripts written to the scratch folder.
+    public static let scriptPOSIXPermissions: Int = 0o700
+
     public static func outputPath(commandId: String) -> String {
-        "/tmp/\(AppIdentity.outputPrefix)\(commandId).json"
+        "\(directoryPath)/\(AppIdentity.outputPrefix)\(commandId).json"
     }
 
     public static func scriptPath(commandId: String) -> String {
-        "/tmp/\(AppIdentity.scriptPrefix)\(commandId).sh"
+        "\(directoryPath)/\(AppIdentity.scriptPrefix)\(commandId).sh"
     }
 
     public static func streamLogPath(commandId: String) -> String {
-        "/tmp/\(AppIdentity.streamPrefix)\(commandId).log"
+        "\(directoryPath)/\(AppIdentity.streamPrefix)\(commandId).log"
     }
 
     public static func streamExitPath(commandId: String) -> String {
-        "/tmp/\(AppIdentity.streamPrefix)\(commandId).exit"
+        "\(directoryPath)/\(AppIdentity.streamPrefix)\(commandId).exit"
     }
 
     public static func streamScriptPath(commandId: String) -> String {
-        "/tmp/\(AppIdentity.streamScriptPrefix)\(commandId).sh"
+        "\(directoryPath)/\(AppIdentity.streamScriptPrefix)\(commandId).sh"
     }
 
     public static func stderrPath(commandId: String) -> String {
-        "/tmp/\(AppIdentity.stderrPrefix)\(commandId).tmp"
+        "\(directoryPath)/\(AppIdentity.stderrPrefix)\(commandId).tmp"
     }
 
     /// Prefer the current prefix; fall back to the v6 `claude_*` name so
     /// in-flight commands survive an upgrade.
     public static func existingOutputPath(commandId: String) -> String? {
         let candidates = [
-            "/tmp/\(AppIdentity.outputPrefix)\(commandId).json",
-            "/tmp/\(AppIdentity.legacyOutputPrefix)\(commandId).json",
+            "\(directoryPath)/\(AppIdentity.outputPrefix)\(commandId).json",
+            "\(directoryPath)/\(AppIdentity.legacyOutputPrefix)\(commandId).json",
         ]
         return candidates.first { FileManager.default.fileExists(atPath: $0) }
     }

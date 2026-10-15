@@ -110,6 +110,7 @@ func createOutputCaptureScript(command: String, commandId: String) -> String {
     
     return """
     #!/bin/bash
+    umask 077
     
     # Command to execute
     COMMAND='\(command.replacingOccurrences(of: "'", with: "'\"'\"'"))'
