@@ -1,4 +1,5 @@
 import Foundation
+import WCRIdentity
 import Logging
 
 /// Configuration structure for Warp Command Runner
@@ -174,11 +175,7 @@ public class ConfigurationManager {
     /// Load configuration from disk
     public static func load(logger: Logger? = nil) -> Configuration {
         // Ensure config directory exists
-        try? FileManager.default.createDirectory(
-            at: configDirectory,
-            withIntermediateDirectories: true,
-            attributes: nil
-        )
+        AppPaths.ensureConfigDirectory(at: configDirectory)
         
         // Check if config file exists
         if FileManager.default.fileExists(atPath: configFile.path) {

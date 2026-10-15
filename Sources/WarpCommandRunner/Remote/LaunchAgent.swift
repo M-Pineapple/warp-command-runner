@@ -1,4 +1,5 @@
 import Foundation
+import WCRIdentity
 
 enum RemoteLaunchAgent {
     static let label = "com.m-pineapple.warp-command-runner"

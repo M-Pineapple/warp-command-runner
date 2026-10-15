@@ -1,4 +1,5 @@
 import Foundation
+import WCRIdentity
 import SQLite3
 import Logging
 
@@ -26,7 +27,7 @@ public class DatabaseManager {
     private init() {
         AppPaths.migrateLegacyConfigIfNeeded()
         let dbDirectory = AppPaths.configDirectory
-        try? FileManager.default.createDirectory(at: dbDirectory, withIntermediateDirectories: true)
+        AppPaths.ensureConfigDirectory(at: dbDirectory)
         self.dbPath = AppPaths.databaseURL.path
         setupDatabase()
     }

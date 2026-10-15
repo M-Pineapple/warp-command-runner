@@ -1,4 +1,5 @@
 import Foundation
+import WCRIdentity
 
 /// Local OAuth 2.1 authorization server for Streamable HTTP MCP.
 /// Tokens live in `~/.warp-command-runner/oauth-store.json` (mode 0600).

@@ -19,16 +19,18 @@ This is for people who **don't live in Cursor or Claude Code**. If you already c
 
 **Can any cloud AI use this?** Any **local MCP host** can, over stdio. Phone apps and websites need **remote MCP**: you run `--http` and publish HTTPS with a tunnel **you** own. Guide: [`docs/REMOTE.md`](docs/REMOTE.md). Matrix: [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
-## What's new in v8.0.1 — remote pairing code
+## What's new in v8.0.2
 
-Remote `--http` mode requires a one-time pairing code shown on the Mac before a new client can be authorized. Remote-mode users should update and delete `~/.warp-command-runner/oauth-store.json` to re-pair. Details: [`docs/REMOTE.md`](docs/REMOTE.md).
+Release 8.0.2 builds with swift-sdk 0.12.1 (no local patch) and ships a committed `Package.resolved` so a fresh clone resolves the same versions. Remote `--http` pairing from 8.0.1 still applies: a one-time code shown on the Mac authorizes a new client. Remote-mode users should update and delete `~/.warp-command-runner/oauth-store.json` to re-pair. Details: [`docs/REMOTE.md`](docs/REMOTE.md).
+
+The data folder is `~/.warp-command-runner` unless you set `WCR_HOME` (see [Data directory](#data-directory)).
 
 ## Quick start
 
 You need macOS 13 or later, Swift 6.0+ (Xcode 16+), and a local MCP host such as Warp Agent or Claude Desktop.
 
 ```bash
-git clone https://github.com/M-Pineapple/warp-command-runner.git
+git clone --branch v8.0.2 --depth 1 https://github.com/M-Pineapple/warp-command-runner.git
 cd warp-command-runner
 ./build.sh
 ```
@@ -49,6 +51,26 @@ Point your host at the binary inside that bundle. For Warp Agent, merge this int
 ```
 
 Restart the host. Ask it to run `swift --version`. That uses `execute_pipeline` and needs no Accessibility grants.
+
+### Data directory
+
+Config, command history, templates, and SSH profiles live in `~/.warp-command-runner`. Set `WCR_HOME` to use a different folder. The value must be an absolute path or start with `~/`. Relative values are ignored. macOS ignores a process-level `HOME=` for `FileManager.homeDirectoryForCurrentUser`, so `WCR_HOME` is the supported override. The folder is created with owner-only permissions (`0700`). ConfigManager uses the same resolution.
+
+```json
+{
+  "mcpServers": {
+    "warp-command-runner": {
+      "command": "/absolute/path/to/warp-command-runner/.build/release/warp-command-runner.app/Contents/MacOS/warp-command-runner",
+      "args": [],
+      "env": {
+        "WCR_HOME": "~/wcr-test"
+      }
+    }
+  }
+}
+```
+
+When `WCR_HOME` is set to a valid path, the server does not copy `~/.claude-command-runner` into that folder.
 
 An unsigned build is enough for the 34 non-keystroke tools. The five Warp-routing tools need a signed `.app` in `/Applications/`. Host snippets, signing, and the Sequoia recipe are under [Installation](#installation). Phone and website hosts need `--http` plus your own HTTPS tunnel. See [`docs/REMOTE.md`](docs/REMOTE.md).
 
@@ -245,7 +267,24 @@ export WCR_CODESIGN_IDENTITY="<your-cert-sha1>"   # optional if auto-detect find
    ```
    See [`docs/WARP_AGENT.md`](docs/WARP_AGENT.md).
 
-   **B — Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`) — same JSON shape. ChatGPT desktop, Cursor, VS Code, Continue: copy a snippet from [`config/`](config/README.md) or [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
+   **B — Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`) — same JSON shape as Warp Agent.
+
+   **C — Cursor** (`~/.cursor/mcp.json`) — the `/Applications/...` path contains spaces, so keep it as one quoted JSON string:
+
+   ```json
+   {
+     "mcpServers": {
+       "warp-command-runner": {
+         "command": "/Applications/Warp Command Runner.app/Contents/MacOS/warp-command-runner",
+         "args": []
+       }
+     }
+   }
+   ```
+
+   If Cursor reports `spawn /Applications/Warp ENOENT`, it split the path on spaces. Run `helper/install-cursor-wrapper.sh` and point `command` at `~/.local/bin/warp-command-runner` instead. See [`config/cursor-mcp.json`](config/cursor-mcp.json).
+
+   ChatGPT desktop, VS Code, Continue: copy a snippet from [`config/`](config/README.md) or [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
    After `./build.sh` you can also point at `$(pwd)/.build/release/warp-command-runner.app/Contents/MacOS/warp-command-runner` before copying the bundle to `/Applications/`.
 
@@ -477,7 +516,7 @@ On `--http` sessions the five Warp-routing tools are refused unless `remote.allo
 | Tool | Description | Use Case |
 |------|-------------|----------|
 | `save_workspace_profile` | Save project context as named profile | Project switching |
-| `load_workspace_profile` | Restore a saved project context | Resume work |
+| `load_workspace_profile` | Restore a saved project context. Required: `name` (from `save_workspace_profile` / `list_workspace_profiles`) | Resume work |
 | `list_workspace_profiles` | View all saved profiles | Organisation |
 | `delete_workspace_profile` | Remove a workspace profile | Cleanup |
 
@@ -502,14 +541,14 @@ On `--http` sessions the five Warp-routing tools are refused unless `remote.allo
 | Tool | Description | Use Case |
 |------|-------------|----------|
 | `add_file_watch` | Watch directory and trigger command on changes | Auto-rebuild, auto-test |
-| `remove_file_watch` | Stop watching a directory | Cleanup |
+| `remove_file_watch` | Stop watching a directory. Required: `watcher_id` (the `ID:` value returned by `add_file_watch`) | Cleanup |
 | `list_file_watches` | View active watchers | Overview |
 
 #### SSH Remote Execution (v5.0)
 
 | Tool | Description | Use Case |
 |------|-------------|----------|
-| `ssh_execute` | Run command on remote host via SSH | Remote ops |
+| `ssh_execute` | Run a command on a remote host via SSH. Required: `command`, plus either `username` (and `host`) or a saved `profile` | Remote ops |
 | `save_ssh_profile` | Save SSH connection profile | Quick connect |
 | `list_ssh_profiles` | View saved SSH profiles | Overview |
 | `delete_ssh_profile` | Remove an SSH profile | Cleanup |
@@ -519,7 +558,7 @@ On `--http` sessions the five Warp-routing tools are refused unless `remote.allo
 | Tool | Description | Use Case |
 |------|-------------|----------|
 | `focus_warp_session` | Dispatch `warp://session/<uuid>` to focus a Warp pane (UUID must be one Warp recognises — typically from the optional shell shim's events) | Resume work in a specific pane |
-| `emit_warp_event` | Build a `printf` invocation that emits an OSC 777 `warp://cli-agent` JSON event into Warp's UI. Schema: `session_start` / `prompt_submit` / `tool_complete` / `stop` / `permission_request` / `idle_prompt`. The returned `printf` must be run inside a Warp pane (e.g. via `execute_command`) to take effect | Status notifications |
+| `emit_warp_event` | Build a `printf` invocation that emits an OSC 777 `warp://cli-agent` JSON event into Warp's UI. Required: `event_type` (`session_start` / `prompt_submit` / `tool_complete` / `stop` / `permission_request` / `idle_prompt`). The returned `printf` must be run inside a Warp pane (e.g. via `execute_command`) to take effect | Status notifications |
 | `shell_shim_status` | Report optional shell-shim socket state and recent events | Verify shim is wired up |
 
 ### Example Workflows
@@ -635,6 +674,9 @@ SSH profiles are stored at `~/.warp-command-runner/ssh_profiles.json`.
 ### Q: Can Grok, ChatGPT, or Gemini use this — not just Claude?
 **A:** Yes, if you chat inside a **local MCP host**. Warp's agent panel is the usual path: set Warp's model to Grok (or GPT, Claude, Gemini) and register this server in `~/.warp/.mcp.json`. ChatGPT desktop and Claude Desktop work the same way. **Browser** tabs on grok.com / chatgpt.com / claude.ai cannot launch a local process. Full matrix: [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md).
 
+### Q: What's new in v8.0.2?
+**A:** swift-sdk 0.12.1 with a committed `Package.resolved`, so `./build.sh` on a fresh clone no longer needs a local SDK patch. Pairing from 8.0.1 is unchanged.
+
 ### Q: What's new in v8.0.1?
 **A:** Remote `--http` mode now requires a one-time pairing code shown on the Mac to authorize a new client. Update, then delete `~/.warp-command-runner/oauth-store.json` and connect again. See [docs/REMOTE.md](docs/REMOTE.md).
 
@@ -645,7 +687,7 @@ SSH profiles are stored at `~/.warp-command-runner/ssh_profiles.json`.
 **A:** Rebrand from Claude Command Runner to Warp Command Runner. Same 40 tools and stdio MCP protocol; names, bundle ID, and `~/.warp-command-runner` paths updated. v6 config is copied on first launch.
 
 ### Q: Cursor says `spawn /Applications/Warp ENOENT`?
-**A:** Cursor splits `command` on spaces. The official path `/Applications/Warp Command Runner.app/...` is correct for Warp and Claude Desktop — do not rename the `.app`. For Cursor, run `helper/install-cursor-wrapper.sh` and point `~/.cursor/mcp.json` at `~/.local/bin/warp-command-runner`. See [`config/cursor-mcp.json`](config/cursor-mcp.json).
+**A:** Keep the path as one quoted JSON string: `"/Applications/Warp Command Runner.app/Contents/MacOS/warp-command-runner"`. Do not rename the `.app`. If Cursor still splits on spaces, run `helper/install-cursor-wrapper.sh` and point `~/.cursor/mcp.json` at `~/.local/bin/warp-command-runner`. See [`config/cursor-mcp.json`](config/cursor-mcp.json).
 
 ### Q: What's new in v6.0.0?
 **A:** Re-pivot to Warp after Warp went open source. Dual-consumer architecture (register the same binary in `~/.warp/.mcp.json` to use it from Warp's native agent panel, in addition to Claude Desktop). `warp://` deeplinks replace AppleScript menu-clicking for tab/window operations. New OSC 777 emitter (`emit_warp_event`) surfaces structured events into Warp's UI. New optional shell shim emits clean preexec/command-finished events to the MCP. Workspace profiles can now also emit Warp-native launch configs. ~460 LOC of dead code removed. Tool count goes from a previously-undercounted 36 (the v5 README claimed 30) up to **39**. See [CHANGELOG.md](CHANGELOG.md) and [docs/WARP_AGENT.md](docs/WARP_AGENT.md) for the full story.

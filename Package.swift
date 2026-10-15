@@ -26,9 +26,16 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.62.0"),
     ],
     targets: [
+        .target(
+            name: "WCRIdentity",
+            dependencies: [
+                .product(name: "Logging", package: "swift-log"),
+            ]
+        ),
         .executableTarget(
             name: "WarpCommandRunner",
             dependencies: [
+                "WCRIdentity",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "MCP", package: "swift-sdk"),
                 .product(name: "Logging", package: "swift-log"),
@@ -44,11 +51,11 @@ let package = Package(
         ),
         .executableTarget(
             name: "ConfigManager",
-            dependencies: []
+            dependencies: ["WCRIdentity"]
         ),
         .testTarget(
             name: "WarpCommandRunnerTests",
-            dependencies: ["WarpCommandRunner"]
+            dependencies: ["WarpCommandRunner", "WCRIdentity"]
         ),
     ]
 )

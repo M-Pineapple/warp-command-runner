@@ -2,6 +2,7 @@ import XCTest
 import Foundation
 import MCP
 @testable import WarpCommandRunner
+@testable import WCRIdentity
 
 // MARK: - Interactive command detection
 
@@ -364,6 +365,116 @@ final class AppIdentityTests: XCTestCase {
         XCTAssertTrue(AppIdentity.tempFilePrefixes.contains("wcr_output_"))
         XCTAssertTrue(AppIdentity.tempFilePrefixes.contains("claude_output_"))
         XCTAssertTrue(AppIdentity.tempFilePrefixes.contains("claude_script_"))
+    }
+
+    func testWCRHomeOverridesConfigDirectory() {
+        let url = AppPaths.configDirectory(environment: [
+            AppPaths.homeOverrideEnvironmentKey: "/tmp/wcr-home-override-test"
+        ])
+        XCTAssertEqual(url.path, "/tmp/wcr-home-override-test")
+    }
+
+    func testWCRHomeExpandsTilde() {
+        let url = AppPaths.configDirectory(environment: [
+            AppPaths.homeOverrideEnvironmentKey: "~/wcr-home-tilde-test"
+        ])
+        XCTAssertEqual(
+            url.path,
+            (NSString("~/wcr-home-tilde-test").expandingTildeInPath as String)
+        )
+        XCTAssertFalse(url.path.contains("~"))
+    }
+
+    func testEmptyWCRHomeFallsBackToDefaultDotDir() {
+        let url = AppPaths.configDirectory(environment: [
+            AppPaths.homeOverrideEnvironmentKey: "   "
+        ])
+        XCTAssertEqual(url.lastPathComponent, AppIdentity.configDirectoryName)
+    }
+
+    func testAbsentWCRHomeUsesDefaultDotDir() {
+        let url = AppPaths.configDirectory(environment: [:])
+        XCTAssertEqual(url.lastPathComponent, AppIdentity.configDirectoryName)
+        XCTAssertTrue(url.path.hasSuffix("/\(AppIdentity.configDirectoryName)"))
+    }
+
+    func testRelativeWCRHomeIsIgnored() {
+        let url = AppPaths.configDirectory(environment: [
+            AppPaths.homeOverrideEnvironmentKey: "relative-wcr-home"
+        ])
+        XCTAssertEqual(url.lastPathComponent, AppIdentity.configDirectoryName)
+        XCTAssertNil(AppPaths.resolvedHomeOverride(environment: [
+            AppPaths.homeOverrideEnvironmentKey: "./wcr-test"
+        ]))
+        XCTAssertFalse(AppPaths.usesHomeOverride(environment: [
+            AppPaths.homeOverrideEnvironmentKey: "wcr-test"
+        ]))
+        XCTAssertTrue(AppPaths.usesHomeOverride(environment: [
+            AppPaths.homeOverrideEnvironmentKey: "~/wcr-test"
+        ]))
+        XCTAssertTrue(AppPaths.usesHomeOverride(environment: [
+            AppPaths.homeOverrideEnvironmentKey: "/tmp/wcr-absolute"
+        ]))
+    }
+
+    func testWCRHomeDirectoryCreatedOwnerOnly() throws {
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent(
+            "wcr-perm-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? fm.removeItem(at: dir) }
+        AppPaths.ensureConfigDirectory(at: dir, fileManager: fm)
+        var isDir: ObjCBool = false
+        XCTAssertTrue(fm.fileExists(atPath: dir.path, isDirectory: &isDir))
+        XCTAssertTrue(isDir.boolValue)
+        let perms = try fm.attributesOfItem(atPath: dir.path)[.posixPermissions] as! NSNumber
+        XCTAssertEqual(perms.intValue & 0o777, 0o700)
+    }
+
+    func testLegacyMigrationSkippedWhenWCRHomeSet() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(
+            "wcr-mig-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        defer { try? fm.removeItem(at: root) }
+        let fakeHome = root.appendingPathComponent("home", isDirectory: true)
+        let legacy = fakeHome.appendingPathComponent(
+            AppIdentity.legacyConfigDirectoryName,
+            isDirectory: true
+        )
+        let isolated = root.appendingPathComponent("isolated", isDirectory: true)
+        try fm.createDirectory(at: legacy, withIntermediateDirectories: true)
+        try "legacy-secret".write(
+            to: legacy.appendingPathComponent("marker.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        AppPaths.migrateLegacyConfigIfNeeded(
+            environment: [AppPaths.homeOverrideEnvironmentKey: isolated.path],
+            userHome: fakeHome,
+            fileManager: fm
+        )
+
+        XCTAssertTrue(fm.fileExists(atPath: isolated.path))
+        XCTAssertFalse(fm.fileExists(atPath: isolated.appendingPathComponent("marker.txt").path))
+        let defaultCurrent = fakeHome.appendingPathComponent(AppIdentity.configDirectoryName)
+        XCTAssertFalse(fm.fileExists(atPath: defaultCurrent.path))
+    }
+
+    func testConfigManagerSharesAppPathsResolution() throws {
+        let src = try String(
+            contentsOf: DependencyFloorTests.root
+                .appendingPathComponent("Sources/ConfigManager/main.swift"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(src.contains("import WCRIdentity"))
+        XCTAssertTrue(src.contains("AppPaths.configDirectory"))
+        XCTAssertTrue(src.contains("AppPaths.ensureConfigDirectory"))
+        XCTAssertFalse(src.contains("home.appendingPathComponent(\".warp-command-runner\")"))
+        XCTAssertFalse(src.contains("home.appendingPathComponent(\".claude-command-runner\")"))
     }
 }
 

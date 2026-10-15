@@ -1,4 +1,5 @@
 import Foundation
+import WCRIdentity
 
 /// Tools that type into the front Warp tab. Unsafe when the user is not
 /// looking at the Mac. Remote HTTP sessions refuse them unless
