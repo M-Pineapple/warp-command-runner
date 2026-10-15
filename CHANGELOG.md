@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [8.0.4] - 2026-10-15
+
 ### Security
 
 - Command scripts and captured output now go to a private scratch folder inside the data folder (`<data folder>/tmp`, owner-only `0700`) instead of the shared `/tmp`. Scripts are written owner-only and run with `umask 077`.

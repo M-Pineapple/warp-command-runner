@@ -30,7 +30,7 @@ The data folder is `~/.warp-command-runner` unless you set `WCR_HOME` (see [Data
 You need macOS 13 or later, Swift 6.0+ (Xcode 16+), and a local MCP host such as Warp Agent or Claude Desktop.
 
 ```bash
-git clone --branch v8.0.3 --depth 1 https://github.com/M-Pineapple/warp-command-runner.git
+git clone --branch v8.0.4 --depth 1 https://github.com/M-Pineapple/warp-command-runner.git
 cd warp-command-runner
 ./build.sh
 ```
