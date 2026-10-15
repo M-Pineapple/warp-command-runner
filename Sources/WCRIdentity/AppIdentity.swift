@@ -80,8 +80,9 @@ public enum AppPaths {
             return nil
         }
         guard raw.hasPrefix("~/") || raw.hasPrefix("/") else { return nil }
-        let expanded = ((raw as NSString).expandingTildeInPath as NSString).standardizingPath
         let home = (userHome.path as NSString).standardizingPath
+        let absolute = raw.hasPrefix("~/") ? home + "/" + raw.dropFirst(2) : raw
+        let expanded = (absolute as NSString).standardizingPath
         if expanded == "/" || expanded.isEmpty || expanded == home {
             return nil
         }
