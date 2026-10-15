@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `WCR_HOME` environment variable overrides the data folder. The default remains `~/.warp-command-runner`. Isolated folders skip the legacy `~/.claude-command-runner` copy.
+
+### Changed
+
+- README: clone command pins tag `v8.0.2`. What's new heading is 8.0.2. Cursor config quotes the `/Applications/Warp Command Runner.app/...` path. Tool table documents required parameters for `load_workspace_profile` (`name`), `remove_file_watch` (`watcher_id` from `add_file_watch`), `ssh_execute` (`username` or `profile`), and `emit_warp_event` (`event_type`).
+
 ## [8.0.2] - 2026-10-15
 
 ### Changed

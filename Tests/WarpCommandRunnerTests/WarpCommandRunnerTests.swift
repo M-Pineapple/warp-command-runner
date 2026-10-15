@@ -365,6 +365,37 @@ final class AppIdentityTests: XCTestCase {
         XCTAssertTrue(AppIdentity.tempFilePrefixes.contains("claude_output_"))
         XCTAssertTrue(AppIdentity.tempFilePrefixes.contains("claude_script_"))
     }
+
+    func testWCRHomeOverridesConfigDirectory() {
+        let url = AppPaths.configDirectory(environment: [
+            AppPaths.homeOverrideEnvironmentKey: "/tmp/wcr-home-override-test"
+        ])
+        XCTAssertEqual(url.path, "/tmp/wcr-home-override-test")
+    }
+
+    func testWCRHomeExpandsTilde() {
+        let url = AppPaths.configDirectory(environment: [
+            AppPaths.homeOverrideEnvironmentKey: "~/wcr-home-tilde-test"
+        ])
+        XCTAssertEqual(
+            url.path,
+            (NSString("~/wcr-home-tilde-test").expandingTildeInPath as String)
+        )
+        XCTAssertFalse(url.path.contains("~"))
+    }
+
+    func testEmptyWCRHomeFallsBackToDefaultDotDir() {
+        let url = AppPaths.configDirectory(environment: [
+            AppPaths.homeOverrideEnvironmentKey: "   "
+        ])
+        XCTAssertEqual(url.lastPathComponent, AppIdentity.configDirectoryName)
+    }
+
+    func testAbsentWCRHomeUsesDefaultDotDir() {
+        let url = AppPaths.configDirectory(environment: [:])
+        XCTAssertEqual(url.lastPathComponent, AppIdentity.configDirectoryName)
+        XCTAssertTrue(url.path.hasSuffix("/\(AppIdentity.configDirectoryName)"))
+    }
 }
 
 // MARK: - Remote MCP policy and OAuth helpers

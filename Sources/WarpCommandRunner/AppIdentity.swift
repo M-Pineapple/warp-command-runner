@@ -39,9 +39,30 @@ enum AppIdentity {
 }
 
 enum AppPaths {
+    static let homeOverrideEnvironmentKey = "WCR_HOME"
+
+    /// Data folder. `WCR_HOME` overrides `~/.warp-command-runner` so a host
+    /// can isolate config (clean-install tests, extra profiles) without
+    /// touching the default directory. `homeDirectoryForCurrentUser` ignores
+    /// a process `HOME=` on macOS, which is why this dedicated variable exists.
     static var configDirectory: URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        configDirectory(environment: ProcessInfo.processInfo.environment)
+    }
+
+    static func configDirectory(environment: [String: String]) -> URL {
+        if let raw = environment[homeOverrideEnvironmentKey]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !raw.isEmpty {
+            let expanded = (raw as NSString).expandingTildeInPath
+            return URL(fileURLWithPath: expanded, isDirectory: true)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(AppIdentity.configDirectoryName)
+    }
+
+    static var usesHomeOverride: Bool {
+        let raw = ProcessInfo.processInfo.environment[homeOverrideEnvironmentKey]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return !(raw ?? "").isEmpty
     }
 
     static var legacyConfigDirectory: URL {
@@ -55,9 +76,15 @@ enum AppPaths {
 
     /// Copy `~/.claude-command-runner` → `~/.warp-command-runner` once.
     /// Does not delete the old directory. Safe to call on every launch.
+    /// Skipped when `WCR_HOME` is set so an isolated data dir is not seeded
+    /// from the real user folder.
     static func migrateLegacyConfigIfNeeded(logger: Logger? = nil) {
         let fm = FileManager.default
         let current = configDirectory
+        if usesHomeOverride {
+            try? fm.createDirectory(at: current, withIntermediateDirectories: true)
+            return
+        }
         let legacy = legacyConfigDirectory
 
         if !fm.fileExists(atPath: current.path), fm.fileExists(atPath: legacy.path) {
