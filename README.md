@@ -6,6 +6,7 @@
   [![Licence](https://img.shields.io/github/license/M-Pineapple/warp-command-runner?label=Licence)](LICENSE)
   [![Swift](https://img.shields.io/badge/Swift-macOS-F05138?logo=swift&logoColor=white)](https://www.swift.org)
   [![Stars](https://img.shields.io/github/stars/M-Pineapple/warp-command-runner)](https://github.com/M-Pineapple/warp-command-runner/stargazers)
+  [![M-Pineapple/warp-command-runner MCP server](https://glama.ai/mcp/servers/M-Pineapple/warp-command-runner/badges/score.svg)](https://glama.ai/mcp/servers/M-Pineapple/warp-command-runner)
 </div>
 
 <img src="assets/demo.gif" alt="warp-command-runner printing version 8.0.0 and its help" width="720"/>
