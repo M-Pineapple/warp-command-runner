@@ -5,11 +5,12 @@ All notable changes to Warp Command Runner will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [8.0.3] - 2026-10-15
 
 ### Added
 
 - `WCR_HOME` environment variable overrides the data folder. The default remains `~/.warp-command-runner`. Isolated folders skip the legacy `~/.claude-command-runner` copy. ConfigManager uses the same `AppPaths` resolution. Relative `WCR_HOME` values are ignored. The folder is created with owner-only permissions (`0700`). README example is `~/wcr-test`.
+- The data folder is now set to owner-only permissions (`0700`) on launch, including an existing folder.
 
 ### Changed
 
