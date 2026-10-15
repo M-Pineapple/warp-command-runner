@@ -67,8 +67,11 @@ public enum AppPaths {
     }
 
     /// Non-nil when `WCR_HOME` is set to an absolute path or `~/…`.
-    /// The filesystem root and the user's home folder itself are refused,
-    /// because the data folder is locked down to `0700`.
+    /// Refused (treated as unset): the filesystem root, the user's home folder
+    /// and any folder that contains it (e.g. `/Users`, `/USERS/<u>`, `/var/..`),
+    /// because the data folder is locked down to `0700`. Paths are compared
+    /// lexically (case-insensitively), after resolving symlinks, and by file
+    /// identity (device + inode) when they exist.
     public static func resolvedHomeOverride(
         environment: [String: String],
         userHome: URL = FileManager.default.homeDirectoryForCurrentUser
@@ -80,13 +83,69 @@ public enum AppPaths {
             return nil
         }
         guard raw.hasPrefix("~/") || raw.hasPrefix("/") else { return nil }
-        let home = (userHome.path as NSString).standardizingPath
+        let home = lexicalPath(userHome.path)
         let absolute = raw.hasPrefix("~/") ? home + "/" + raw.dropFirst(2) : raw
-        let expanded = (absolute as NSString).standardizingPath
-        if expanded == "/" || expanded.isEmpty || expanded == home {
+        let expanded = lexicalPath(absolute)
+        if expanded.isEmpty || isRootOrAncestor(expanded, of: home) {
             return nil
         }
         return URL(fileURLWithPath: expanded, isDirectory: true)
+    }
+
+    /// Collapse `.`, `..` and repeated slashes without touching the disk.
+    static func lexicalPath(_ path: String) -> String {
+        var parts: [Substring] = []
+        for comp in path.split(separator: "/", omittingEmptySubsequences: true) {
+            if comp == "." { continue }
+            if comp == ".." { if !parts.isEmpty { parts.removeLast() }; continue }
+            parts.append(comp)
+        }
+        return "/" + parts.joined(separator: "/")
+    }
+
+    /// Resolve symlinks for the longest existing prefix, keep the rest lexical.
+    static func resolvedPath(_ path: String) -> String {
+        var existing = lexicalPath(path)
+        var tail: [String] = []
+        while existing != "/" {
+            if let real = realpath(existing, nil) {
+                defer { free(real) }
+                let base = String(cString: real)
+                return lexicalPath(([base] + tail.reversed()).joined(separator: "/"))
+            }
+            tail.append((existing as NSString).lastPathComponent)
+            existing = (existing as NSString).deletingLastPathComponent
+        }
+        return lexicalPath("/" + tail.reversed().joined(separator: "/"))
+    }
+
+    private static func isAncestorOrSame(_ a: String, _ b: String) -> Bool {
+        let x = a.lowercased(), y = b.lowercased()
+        return x == "/" || x == y || y.hasPrefix(x + "/")
+    }
+
+    private static func fileID(_ path: String) -> (UInt64, UInt64)? {
+        var st = stat()
+        guard stat(path, &st) == 0 else { return nil }
+        return (UInt64(st.st_dev), UInt64(st.st_ino))
+    }
+
+    static func isRootOrAncestor(_ candidate: String, of home: String) -> Bool {
+        if isAncestorOrSame(candidate, home) { return true }
+        let realCandidate = resolvedPath(candidate)
+        let realHome = resolvedPath(home)
+        if isAncestorOrSame(realCandidate, realHome) || isAncestorOrSame(realCandidate, home) {
+            return true
+        }
+        // File identity: the candidate is the same directory as home or one of its ancestors.
+        guard let cid = fileID(candidate) else { return false }
+        var walk = realHome
+        while true {
+            if let hid = fileID(walk), hid == cid { return true }
+            if walk == "/" { break }
+            walk = (walk as NSString).deletingLastPathComponent
+        }
+        return false
     }
 
     public static func usesHomeOverride(

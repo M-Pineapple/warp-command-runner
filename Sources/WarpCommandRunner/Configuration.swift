@@ -342,39 +342,67 @@ extension Configuration {
         return false
     }
     
-    /// Built-in check for `rm` with recursive + force flags (any order or
-    /// spelling) aimed at `/` or `/*`. The blocklist is a speed bump against
-    /// mistakes, not a security boundary.
+    /// Built-in check for destructive deletes aimed at `/` or the home folder:
+    /// `rm` with recursive + force flags (any order, spelling, quoting or
+    /// `\rm` escaping) and `find … -delete` / `find … -exec rm`. Targets are
+    /// normalised (`/..`, `/tmp/../`, `~`, `$HOME`, `${HOME}`). The blocklist
+    /// is a speed bump against mistakes, not a security boundary.
     static func isRecursiveForceRemoveOfRoot(_ command: String) -> Bool {
         let separators: Set<String> = [";", "&&", "||", "|", "&", ";;"]
         let spaced = command.replacingOccurrences(
             of: "([;&|]+)", with: " $1 ", options: .regularExpression
         )
-        let tokens = spaced.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+        // Drop shell quoting and escapes: r''m, "rm", \rm all become rm.
+        let tokens = spaced.split(whereSeparator: { $0.isWhitespace }).map {
+            String($0).replacingOccurrences(of: "[\\\\'\"]", with: "", options: .regularExpression)
+        }
         var i = 0
         while i < tokens.count {
-            let tok = tokens[i].trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
-            if tok == "rm" || tok.hasSuffix("/rm") {
-                var recursive = false, force = false, rootTarget = false
+            let tok = tokens[i]
+            let name = (tok as NSString).lastPathComponent
+            if name == "rm" || name == "find" {
+                var recursive = false, force = false, deletes = false, dangerous = false
                 var j = i + 1
                 while j < tokens.count, !separators.contains(tokens[j]) {
-                    let a = tokens[j].trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
-                    if a == "--recursive" { recursive = true }
-                    else if a == "--force" { force = true }
-                    else if a.hasPrefix("-"), !a.hasPrefix("--") {
-                        if a.contains("r") || a.contains("R") { recursive = true }
-                        if a.contains("f") { force = true }
-                    } else if ["/", "/*", "/.", "//"].contains(a) || a.hasPrefix("/*") {
-                        rootTarget = true
+                    let a = tokens[j]
+                    if name == "rm" {
+                        if a == "--recursive" { recursive = true }
+                        else if a == "--force" { force = true }
+                        else if a.hasPrefix("-"), !a.hasPrefix("--") {
+                            if a.contains("r") || a.contains("R") { recursive = true }
+                            if a.contains("f") { force = true }
+                        }
+                    } else if a == "-delete" || a == "rm" || a.hasSuffix("/rm") {
+                        deletes = true
                     }
+                    if isDangerousDeleteTarget(a) { dangerous = true }
                     j += 1
                 }
-                if recursive && force && rootTarget { return true }
+                if name == "rm", recursive && force && dangerous { return true }
+                if name == "find", deletes && dangerous { return true }
                 i = j
             }
             i += 1
         }
         return false
+    }
+
+    /// `/`, `/*`, `//`, `/..`, `/tmp/../..`, `~`, `~/`, `~/*`, `$HOME`, `${HOME}/`.
+    static func isDangerousDeleteTarget(_ raw: String) -> Bool {
+        var t = raw
+        for home in ["${HOME}", "$HOME", "~"] where t == home || t.hasPrefix(home + "/") {
+            t = "/HOME" + t.dropFirst(home.count)
+            break
+        }
+        guard t.hasPrefix("/") else { return false }
+        var parts: [Substring] = []
+        for comp in t.split(separator: "/", omittingEmptySubsequences: true) {
+            if comp == "." || comp == "*" || comp == ".*" { continue }
+            if comp == ".." { if !parts.isEmpty { parts.removeLast() }; continue }
+            parts.append(comp)
+        }
+        if parts.isEmpty { return true }
+        return raw != t && parts == ["HOME"]
     }
 
     /// Check if a command requires confirmation
