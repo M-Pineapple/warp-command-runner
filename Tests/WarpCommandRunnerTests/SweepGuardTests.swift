@@ -37,8 +37,12 @@ final class SweepGuardTests: XCTestCase {
     func testTempFilesLiveInPrivateScratchFolder() throws {
         let base = FileManager.default.temporaryDirectory
             .appendingPathComponent("wcr-guard-\(UUID().uuidString)")
+        let previous = ProcessInfo.processInfo.environment["WCR_HOME"]
         setenv("WCR_HOME", base.path, 1)
-        defer { unsetenv("WCR_HOME"); try? FileManager.default.removeItem(at: base) }
+        defer {
+            if let previous { setenv("WCR_HOME", previous, 1) } else { unsetenv("WCR_HOME") }
+            try? FileManager.default.removeItem(at: base)
+        }
 
         for path in [TempFiles.outputPath(commandId: "x"), TempFiles.scriptPath(commandId: "x"),
                      TempFiles.streamLogPath(commandId: "x"), TempFiles.streamExitPath(commandId: "x"),
