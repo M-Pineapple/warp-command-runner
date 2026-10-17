@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The app bundle's `Info.plist` version is read from `Sources/WCRIdentity/AppIdentity.swift`. The bundle script no longer falls back to 7.0.0 when that declaration is missing.
+
 ## [8.0.4] - 2026-10-15
 
 ### Security
