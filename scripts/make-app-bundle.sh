@@ -27,17 +27,18 @@ BUILD_DIR="${PROJECT_ROOT}/.build/release"
 BINARY="${BUILD_DIR}/warp-command-runner"
 BUNDLE="${BUILD_DIR}/warp-command-runner.app"
 
-# Read version from the Swift source (single source of truth: the
-# `static let version` constant). The `|| true` matters: under set -e a
-# non-matching grep would otherwise kill the script silently before the
-# bundle is created. Fall back to the older `version: "x.y.z"` pattern,
-# then to a hardcoded floor.
-VERSION=$(grep -E 'static let version = "[0-9]+\.[0-9]+\.[0-9]+"' "${PROJECT_ROOT}/Sources/WarpCommandRunner/AppIdentity.swift" 2>/dev/null | head -1 | sed -E 's/.*version = "([^"]+)".*/\1/' || true)
-if [[ -z "${VERSION}" ]]; then
-    VERSION=$(grep -E 'static let version = "[0-9]+\.[0-9]+\.[0-9]+"' "${PROJECT_ROOT}/Sources/WarpCommandRunner/WarpCommandRunner.swift" 2>/dev/null | head -1 | sed -E 's/.*version = "([^"]+)".*/\1/' || true)
+# Single source of truth: `public static let version` in AppIdentity.
+# An already-set VERSION in the environment is an explicit override.
+# The `|| true` matters: under set -e a non-matching grep would otherwise
+# kill the script silently before we can report the missing declaration.
+# There is no hardcoded version fallback.
+IDENTITY_SWIFT="${PROJECT_ROOT}/Sources/WCRIdentity/AppIdentity.swift"
+if [[ -z "${VERSION:-}" ]]; then
+    VERSION=$(grep -E 'public static let version = "[^"]+"' "${IDENTITY_SWIFT}" 2>/dev/null | head -1 | sed -E 's/.*version = "([^"]+)".*/\1/' || true)
 fi
 if [[ -z "${VERSION}" ]]; then
-    VERSION="7.0.0"
+    echo "make-app-bundle: could not read public static let version from ${IDENTITY_SWIFT}." >&2
+    exit 1
 fi
 
 if [[ ! -f "${BINARY}" ]]; then
