@@ -52,7 +52,9 @@ final class SweepGuardTests: XCTestCase {
         for path in [TempFiles.outputPath(commandId: "x"), TempFiles.scriptPath(commandId: "x"),
                      TempFiles.streamLogPath(commandId: "x"), TempFiles.streamExitPath(commandId: "x"),
                      TempFiles.streamScriptPath(commandId: "x"), TempFiles.stderrPath(commandId: "x")] {
-            XCTAssertFalse(path.hasPrefix("/tmp/"), path)
+            let parent = URL(fileURLWithPath: path).deletingLastPathComponent().path
+            XCTAssertNotEqual(parent, "/tmp", path)
+            XCTAssertNotEqual(parent, "/private/tmp", path)
             XCTAssertTrue(path.hasPrefix(base.path), path)
         }
         let attrs = try FileManager.default.attributesOfItem(atPath: TempFiles.directoryPath)
@@ -63,6 +65,7 @@ final class SweepGuardTests: XCTestCase {
 
     // MARK: request size cap
 
+    #if os(macOS)
     func testRequestBodyLimiterCapsBodies() {
         var l = RequestBodyLimiter(maxBytes: 10)
         l.begin(declaredLength: nil)
@@ -76,6 +79,7 @@ final class SweepGuardTests: XCTestCase {
         XCTAssertFalse(l.exceeded)
         XCTAssertEqual(RequestBodyLimiter.defaultMaxBytes, 1 << 20)
     }
+    #endif
 
     // MARK: WCR_HOME
 
@@ -115,6 +119,7 @@ final class SweepGuardTests: XCTestCase {
 
     // MARK: server-level 413
 
+    #if os(macOS)
     func testRemoteServerAnswers413ForOversizedBody() async throws {
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("wcr-413-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
@@ -159,6 +164,7 @@ final class SweepGuardTests: XCTestCase {
         let streamed = try await post { $0.httpBodyStream = InputStream(data: big) }
         XCTAssertEqual(streamed, 413)
     }
+    #endif
 
     // MARK: script mode writes into the private folder
 

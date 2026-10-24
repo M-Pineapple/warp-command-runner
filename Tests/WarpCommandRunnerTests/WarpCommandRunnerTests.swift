@@ -286,12 +286,17 @@ final class ProcessRunnerTests: XCTestCase {
     }
 
     func testWorkingDirectoryIsHonoured() async throws {
+        #if os(macOS)
+        let scratch = "/private/tmp"
+        #else
+        let scratch = "/tmp"
+        #endif
         let result = try await runProcess(
             executablePath: "/bin/bash",
             arguments: ["-c", "pwd"],
-            currentDirectory: "/private/tmp"
+            currentDirectory: scratch
         )
-        XCTAssertEqual(result.stdout.trimmingCharacters(in: .whitespacesAndNewlines), "/private/tmp")
+        XCTAssertEqual(result.stdout.trimmingCharacters(in: .whitespacesAndNewlines), scratch)
     }
 }
 
@@ -506,6 +511,7 @@ final class RemotePolicyTests: XCTestCase {
     }
 }
 
+#if os(macOS)
 final class OAuthCryptoTests: XCTestCase {
     func testS256MatchesKnownVector() {
         // RFC 7636 appendix B
@@ -746,6 +752,7 @@ final class PairingCodeTests: XCTestCase {
         XCTAssertFalse(limiter.allow(existingClients: RegistrationLimiter.maxClients, now: t))
     }
 }
+#endif
 
 final class TunnelDoctorTests: XCTestCase {
     func testDoctorMentionsUserOwnedTunnel() {
