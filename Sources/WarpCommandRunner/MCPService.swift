@@ -1,4 +1,5 @@
 import Foundation
+import Logging
 import ServiceLifecycle
 import MCP
 
@@ -13,12 +14,34 @@ struct MCPService: Service {
     let server: Server
     let transport: any Transport
 
+    /// ServiceLifecycle never calls a `shutdown()` method on a service. It
+    /// signals graceful shutdown (SIGTERM/SIGINT) or cancels the task, so the
+    /// server is stopped from those handlers. Without this the process kept
+    /// running after SIGTERM until stdin closed.
     func run() async throws {
         try await server.start(transport: transport)
-        await server.waitUntilCompleted()
+        await withTaskCancellationOrGracefulShutdownHandler {
+            await server.waitUntilCompleted()
+        } onCancelOrGracefulShutdown: {
+            Task { await server.stop() }
+        }
     }
 
-    func shutdown() async {
-        await server.stop()
+    /// The process-wide group. When the MCP service finishes (stdin EOF) the
+    /// group shuts down gracefully, so the process exits 0 instead of failing
+    /// with "service finished unexpectedly".
+    static func makeServiceGroup(
+        mcpService: MCPService,
+        extraServices: [any Service],
+        logger: Logger
+    ) -> ServiceGroup {
+        ServiceGroup(
+            configuration: .init(
+                services: [.init(service: mcpService, successTerminationBehavior: .gracefullyShutdownGroup)]
+                    + extraServices.map { .init(service: $0) },
+                gracefulShutdownSignals: [.sigterm, .sigint],
+                logger: logger
+            )
+        )
     }
 }

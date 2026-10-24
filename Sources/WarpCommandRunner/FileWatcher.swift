@@ -45,10 +45,17 @@ actor FileWatcher {
         }
     }
 
+    #if os(macOS)
+    private typealias WatchSource = DispatchSourceFileSystemObject
+    #else
+    // File-system object sources are macOS only; addWatch refuses on Linux.
+    private typealias WatchSource = DispatchSourceProtocol
+    #endif
+
     /// Active watch session with its dispatch source
     private struct ActiveWatch {
         let rule: WatchRule
-        let source: DispatchSourceFileSystemObject
+        let source: WatchSource
         let fileDescriptor: Int32
         var lastTriggered: Date?
     }
@@ -74,6 +81,7 @@ actor FileWatcher {
             throw FileWatcherError.pathNotFound(rule.path)
         }
 
+        #if os(macOS)
         rules[rule.id] = rule
 
         // Only start the source if watching a directory (file-level watching
@@ -125,6 +133,9 @@ actor FileWatcher {
 
         logger.info("FileWatcher: Started watching '\(watchPath)' → '\(ruleCommand)' (ID: \(rule.id))")
         return rule
+        #else
+        throw FileWatcherError.needsMacOS
+        #endif
     }
 
     /// Remove a watch by ID
@@ -311,12 +322,14 @@ enum FileWatcherError: Swift.Error, LocalizedError {
     case pathNotFound(String)
     case cannotOpenPath(String)
     case watchNotFound(String)
+    case needsMacOS
 
     var errorDescription: String? {
         switch self {
         case .pathNotFound(let path): return "Path not found: \(path)"
         case .cannotOpenPath(let path): return "Cannot open path for watching: \(path)"
         case .watchNotFound(let id): return "Watch not found with ID: \(id)"
+        case .needsMacOS: return "File watching needs macOS (file-system events)."
         }
     }
 }

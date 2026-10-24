@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Linux container build (`Dockerfile`). On Linux the server lists the same 40 tools; the ten that drive Warp or other macOS apps return a "needs macOS" error, and `--http` is refused.
+- `resources/templates/list` answers with an empty list instead of "method not found".
+
 ### Fixed
 
+- The server exits 0 on SIGTERM or SIGINT. Before, it kept running until stdin closed.
+- The server exits 0 when stdin closes. Before, it exited 1 with "service finished unexpectedly".
+- Process output is read with a loop that retries interrupted reads. On Linux, Foundation's `readDataToEndOfFile()` crashed the server when a signal interrupted it.
 - The app bundle's `Info.plist` version is read from `Sources/WCRIdentity/AppIdentity.swift`. The bundle script no longer falls back to 7.0.0 when that declaration is missing.
 
 ## [8.0.4] - 2026-10-15

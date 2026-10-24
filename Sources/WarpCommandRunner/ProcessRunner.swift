@@ -48,6 +48,27 @@ private final class Locked<T>: @unchecked Sendable {
     }
 }
 
+/// Read a pipe until EOF, retrying reads interrupted by a signal.
+///
+/// On Linux, Foundation's `readDataToEndOfFile()` traps on EINTR (it uses
+/// `try!` internally), and SIGCHLD from the exiting child interrupts the read
+/// often enough to crash the server. A plain read loop is safe on both.
+func readToEndOfFile(_ handle: FileHandle) -> Data {
+    let fd = handle.fileDescriptor
+    var data = Data()
+    var buffer = [UInt8](repeating: 0, count: 65_536)
+    while true {
+        let count = buffer.withUnsafeMutableBytes { read(fd, $0.baseAddress, $0.count) }
+        if count > 0 {
+            data.append(contentsOf: buffer[0..<count])
+        } else if count < 0 && errno == EINTR {
+            continue
+        } else {
+            return data
+        }
+    }
+}
+
 /// Default grace period between SIGTERM and SIGKILL on timeout.
 private let killGracePeriod: TimeInterval = 2.0
 
@@ -116,12 +137,12 @@ func runProcessBlocking(
     let drainGroup = DispatchGroup()
     drainGroup.enter()
     DispatchQueue.global(qos: .userInitiated).async {
-        stdoutData.value = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        stdoutData.value = readToEndOfFile(stdoutPipe.fileHandleForReading)
         drainGroup.leave()
     }
     drainGroup.enter()
     DispatchQueue.global(qos: .userInitiated).async {
-        stderrData.value = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        stderrData.value = readToEndOfFile(stderrPipe.fileHandleForReading)
         drainGroup.leave()
     }
 
