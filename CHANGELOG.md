@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Tests: the test target now compiles and runs on Linux. Remote-mode tests are macOS-only, matching the remote sources.
 - The server exits 0 on SIGTERM or SIGINT. Before, it kept running until stdin closed.
 - The server exits 0 when stdin closes. Before, it exited 1 with "service finished unexpectedly".
 - Process output is read with a loop that retries interrupted reads. On Linux, Foundation's `readDataToEndOfFile()` crashed the server when a signal interrupted it.
