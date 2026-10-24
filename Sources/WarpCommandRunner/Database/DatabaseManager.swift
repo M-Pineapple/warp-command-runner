@@ -1,6 +1,10 @@
 import Foundation
 import WCRIdentity
+#if canImport(SQLite3)
 import SQLite3
+#else
+import CSQLite
+#endif
 import Logging
 
 // SQLite constants

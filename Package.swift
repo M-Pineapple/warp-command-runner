@@ -26,6 +26,12 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.62.0"),
     ],
     targets: [
+        // Linux only: macOS gets sqlite3 from the SDK's SQLite3 module.
+        .systemLibrary(
+            name: "CSQLite",
+            path: "Sources/CSQLite",
+            providers: [.apt(["libsqlite3-dev"])]
+        ),
         .target(
             name: "WCRIdentity",
             dependencies: [
@@ -36,6 +42,7 @@ let package = Package(
             name: "WarpCommandRunner",
             dependencies: [
                 "WCRIdentity",
+                .target(name: "CSQLite", condition: .when(platforms: [.linux])),
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "MCP", package: "swift-sdk"),
                 .product(name: "Logging", package: "swift-log"),
@@ -55,7 +62,12 @@ let package = Package(
         ),
         .testTarget(
             name: "WarpCommandRunnerTests",
-            dependencies: ["WarpCommandRunner", "WCRIdentity"]
+            dependencies: [
+                "WarpCommandRunner",
+                "WCRIdentity",
+                .product(name: "MCP", package: "swift-sdk"),
+                .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
+            ]
         ),
     ]
 )

@@ -306,6 +306,17 @@ export WCR_CODESIGN_IDENTITY="<your-cert-sha1>"   # optional if auto-detect find
    ```
    See `helper/shell-shim.zsh` / `helper/shell-shim.bash` for the implementation. Uninstall with `helper/uninstall-shim.sh`.
 
+### Linux and containers
+
+The server is built for macOS, but the stdio server also builds and runs on Linux, so registries such as Glama can start it in a container to check it:
+
+```bash
+docker build -t warp-command-runner .
+docker run -i --rm warp-command-runner
+```
+
+On Linux it lists the same 40 tools. The ten that drive Warp or other macOS apps (`execute_command`, `execute_with_auto_retrieve`, `execute_with_streaming`, `run_template`, `send_to_session`, `open_terminal_tab`, `focus_warp_session`, `copy_to_clipboard`, `read_from_clipboard`, `add_file_watch`) return a "needs macOS" error. `execute_pipeline`, `execute_and_parse`, `ssh_execute` and the history, template and analysis tools work. Remote mode (`--http`, `--install-agent`) is macOS only.
+
 ### Upgrading from a previous version
 
 If you already have a signed install working (TCC permissions granted), upgrading is:

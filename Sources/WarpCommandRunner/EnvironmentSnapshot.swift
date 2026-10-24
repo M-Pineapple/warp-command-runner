@@ -269,7 +269,7 @@ func captureRealShellEnvironment(
         return fallback()
     }
 
-    let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+    let data = readToEndOfFile(outputPipe.fileHandleForReading)
     let output = String(data: data, encoding: .utf8) ?? ""
 
     var variables: [String: String] = [:]

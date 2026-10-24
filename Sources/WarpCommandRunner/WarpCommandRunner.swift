@@ -143,6 +143,13 @@ struct WarpCommandRunner: AsyncParsableCommand {
             return
         }
 
+        #if !os(macOS)
+        if installAgent || uninstallAgent || http {
+            FileHandle.standardError.write(Data((PlatformSupport.remoteModeNeedsMacOSMessage + "\n").utf8))
+            throw ExitCode.failure
+        }
+        #endif
+
         if installAgent {
             print(try RemoteLaunchAgent.install())
             return
@@ -906,6 +913,10 @@ struct WarpCommandRunner: AsyncParsableCommand {
                 )
             }
 
+            if let unavailable = PlatformSupport.unavailableResult(for: params.name) {
+                return unavailable
+            }
+
             switch params.name {
             case "suggest_command":
                 return try await handleSuggestCommand(params: params, logger: logger)
@@ -1014,6 +1025,7 @@ struct WarpCommandRunner: AsyncParsableCommand {
         let mcpService: MCPService
         var extraServices: [any Service] = []
         if httpMode {
+            #if os(macOS)
             let issuer = (config.remote.publicBaseURL?.trimmingCharacters(in: CharacterSet(charactersIn: "/"))).flatMap { $0.isEmpty ? nil : $0 }
                 ?? "http://127.0.0.1:\(listenPort)"
             let oauth = OAuthService(issuer: issuer)
@@ -1031,6 +1043,10 @@ struct WarpCommandRunner: AsyncParsableCommand {
                 issuer: issuer
             )
             extraServices.append(HTTPListenService(server: httpServer))
+            #else
+            // Unreachable: --http is refused above off macOS.
+            throw ExitCode.failure
+            #endif
         } else {
             mcpService = MCPService(server: server, transport: StdioTransport(logger: logger))
         }
@@ -1040,9 +1056,9 @@ struct WarpCommandRunner: AsyncParsableCommand {
         let shimChannel = startShellShimSocketIfPossible(logger: logger)
 
         // Create service group
-        let serviceGroup = ServiceGroup(
-            services: [mcpService] + extraServices,
-            gracefulShutdownSignals: [.sigterm, .sigint],
+        let serviceGroup = MCPService.makeServiceGroup(
+            mcpService: mcpService,
+            extraServices: extraServices,
             logger: logger
         )
 

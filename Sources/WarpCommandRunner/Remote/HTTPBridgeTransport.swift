@@ -1,3 +1,6 @@
+// The remote HTTP mode (OAuth, pairing codes) needs CryptoKit and Security,
+// so it is built on macOS only. Linux builds refuse --http with a clear error.
+#if os(macOS)
 import Foundation
 import MCP
 import Logging
@@ -107,3 +110,4 @@ enum HTTPBridgeError: Error {
     case invalidJSON
     case unauthorized
 }
+#endif

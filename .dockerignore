@@ -1,0 +1,13 @@
+.build
+.build-linux
+.swiftpm
+.git
+.worktrees
+.github
+assets
+docs
+examples
+helper
+scripts
+*.md
+!README.md

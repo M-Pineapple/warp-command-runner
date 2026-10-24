@@ -12,6 +12,10 @@ extension WarpCommandRunner {
             // Return empty resources for now as we don't expose any
             return ListResources.Result(resources: [])
         }
+        await server.withMethodHandler(ListResourceTemplates.self) { _ in
+            logger.debug("Listing resource templates")
+            return ListResourceTemplates.Result(templates: [])
+        }
     }
     
     /// Handle prompts/list method

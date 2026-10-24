@@ -1,3 +1,6 @@
+// The remote HTTP mode (OAuth, pairing codes) needs CryptoKit and Security,
+// so it is built on macOS only. Linux builds refuse --http with a clear error.
+#if os(macOS)
 import Foundation
 import WCRIdentity
 import NIOCore
@@ -417,3 +420,4 @@ struct HTTPListenService: Service {
         try await server.bind()
     }
 }
+#endif
