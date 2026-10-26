@@ -1,0 +1,61 @@
+# Linux CI for the stdio server.
+# Swift 6.1.3 and libsqlite3-dev match the Dockerfile. The macOS-only remote
+# tests are not part of this build.
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            binutils \
+            git \
+            unzip \
+            libc6-dev \
+            libcurl4-openssl-dev \
+            libedit2 \
+            libgcc-13-dev \
+            libpython3-dev \
+            libsqlite3-dev \
+            libstdc++-13-dev \
+            libxml2-dev \
+            libncurses-dev \
+            libz3-dev \
+            pkg-config \
+            tzdata \
+            zlib1g-dev
+
+      - name: Install Swift 6.1.3
+        run: |
+          curl -fsSL \
+            "https://download.swift.org/swift-6.1.3-release/ubuntu2404/swift-6.1.3-RELEASE/swift-6.1.3-RELEASE-ubuntu24.04.tar.gz" \
+            -o "$RUNNER_TEMP/swift.tar.gz"
+          sudo mkdir -p /opt/swift
+          sudo tar -xzf "$RUNNER_TEMP/swift.tar.gz" -C /opt/swift --strip-components=1
+          echo "/opt/swift/usr/bin" >> "$GITHUB_PATH"
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
