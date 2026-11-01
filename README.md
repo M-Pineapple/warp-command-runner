@@ -916,7 +916,7 @@ Thank you for considering supporting my work! 🙏
 
 ## More MCP servers by M-Pineapple
 
-- [Claude-Project-Coordinator](https://github.com/M-Pineapple/Claude-Project-Coordinator)
+- [Dev Project Coordinator](https://github.com/M-Pineapple/Dev-Project-Coordinator)
 - [CryptoAnalysisMCP](https://github.com/M-Pineapple/CryptoAnalysisMCP)
 - [msty-admin-mcp](https://github.com/M-Pineapple/msty-admin-mcp)
 - [member-berries-apple-mcp](https://github.com/M-Pineapple/member-berries-apple-mcp)
